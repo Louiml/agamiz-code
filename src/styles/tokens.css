@@ -1,0 +1,645 @@
+@import "tailwindcss";
+
+@theme {
+  /* Apple SF Pro / SF Mono typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+    "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", "Fira Code", "Fira Mono", "JetBrains Mono",
+    ui-monospace, "Cascadia Code", monospace;
+
+  /* Base palette — defaults to the dark (Sequoia) theme */
+  --color-bg-base: #0d0d0d;
+  --color-bg-elevated: #1a1a1a;
+  --color-bg-overlay: #242424;
+  --color-bg-glass: rgb(255 255 255 / 0.04);
+  --color-bg-glass-strong: rgb(255 255 255 / 0.08);
+  --color-bg-glass-hover: rgb(255 255 255 / 0.12);
+  --color-bg-glass-active: rgb(255 255 255 / 0.16);
+
+  --color-text-primary: #f5f5f7;
+  --color-text-secondary: #a1a1a6;
+  --color-text-tertiary: #6e6e73;
+  --color-text-accent: #64d2ff;
+
+  --color-border-glass: rgb(255 255 255 / 0.08);
+  --color-border-strong: rgb(255 255 255 / 0.14);
+  --color-border-focus: #007aff;
+
+  --color-accent-blue: #007aff;
+  --color-accent-teal: #64d2ff;
+  --color-accent-green: #30d158;
+  --color-accent-orange: #ff9f0a;
+  --color-accent-red: #ff453a;
+  --color-accent-pink: #ff375f;
+  --color-accent-purple: #bf5af2;
+
+  /* Shadows — material-aware */
+  --shadow-glass-xs: 0 1px 2px rgb(0 0 0 / 0.12), 0 0 0 0.5px rgb(255 255 255 / 0.06);
+  --shadow-glass-sm: 0 2px 8px rgb(0 0 0 / 0.2), 0 0 0 0.5px rgb(255 255 255 / 0.08);
+  --shadow-glass-md: 0 8px 24px rgb(0 0 0 / 0.3), 0 0 0 0.5px rgb(255 255 255 / 0.1);
+  --shadow-glass-lg: 0 16px 48px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.12);
+  --shadow-glass-pill: 0 4px 16px rgb(0 0 0 / 0.25), 0 0 0 0.5px rgb(255 255 255 / 0.1),
+    inset 0 1px 0 rgb(255 255 255 / 0.06);
+
+  /* Radii */
+  --radius-glass-sm: 8px;
+  --radius-glass-md: 10px;
+  --radius-glass-lg: 12px;
+  --radius-glass-xl: 16px;
+  --radius-glass-pill: 999px;
+
+  /* Backdrop blur intensities */
+  --blur-glass-xs: 4px;
+  --blur-glass-sm: 8px;
+  --blur-glass-md: 20px;
+  --blur-glass-lg: 40px;
+
+  /* Spacing */
+  --spacing-titlebar: 38px;
+  --spacing-statusbar: 48px;
+  --spacing-sidebar: 260px;
+  --spacing-inspector: 300px;
+}
+
+/* ============================================
+   Theme variants — scoped by [data-theme]
+   ============================================ */
+:root[data-theme="dark"] {
+  --color-bg-base: #0d0d0d;
+  --color-bg-elevated: #1a1a1a;
+  --color-bg-overlay: #242424;
+  --color-bg-glass: rgb(255 255 255 / 0.04);
+  --color-bg-glass-strong: rgb(255 255 255 / 0.08);
+  --color-bg-glass-hover: rgb(255 255 255 / 0.12);
+  --color-bg-glass-active: rgb(255 255 255 / 0.16);
+  --color-text-primary: #f5f5f7;
+  --color-text-secondary: #a1a1a6;
+  --color-text-tertiary: #6e6e73;
+  --color-text-accent: #64d2ff;
+  --color-border-glass: rgb(255 255 255 / 0.08);
+  --color-border-strong: rgb(255 255 255 / 0.14);
+  --color-border-focus: #007aff;
+  --color-accent-blue: #007aff;
+  --color-accent-teal: #64d2ff;
+  --color-accent-green: #30d158;
+  --color-accent-orange: #ff9f0a;
+  --color-accent-red: #ff453a;
+  --color-accent-pink: #ff375f;
+  --color-accent-purple: #bf5af2;
+}
+
+:root[data-theme="light"] {
+  --color-bg-base: #f2f2f7;
+  --color-bg-elevated: #ffffff;
+  --color-bg-overlay: #f7f7fa;
+  --color-bg-glass: rgb(0 0 0 / 0.04);
+  --color-bg-glass-strong: rgb(0 0 0 / 0.07);
+  --color-bg-glass-hover: rgb(0 0 0 / 0.1);
+  --color-bg-glass-active: rgb(0 0 0 / 0.14);
+  --color-text-primary: #1d1d1f;
+  --color-text-secondary: #4d4d55;
+  --color-text-tertiary: #8a8a93;
+  --color-text-accent: #0a84ff;
+  --color-border-glass: rgb(0 0 0 / 0.08);
+  --color-border-strong: rgb(0 0 0 / 0.14);
+  --color-border-focus: #007aff;
+  --color-accent-blue: #0a84ff;
+  --color-accent-teal: #0a84ff;
+  --color-accent-green: #30a158;
+  --color-accent-orange: #e08a00;
+  --color-accent-red: #d70015;
+  --color-accent-pink: #e2315d;
+  --color-accent-purple: #8e48b8;
+}
+
+:root[data-theme="purple"] {
+  --color-bg-base: #141019;
+  --color-bg-elevated: #211a2b;
+  --color-bg-overlay: #2b2138;
+  --color-bg-glass: rgb(190 120 255 / 0.06);
+  --color-bg-glass-strong: rgb(190 120 255 / 0.11);
+  --color-bg-glass-hover: rgb(190 120 255 / 0.16);
+  --color-bg-glass-active: rgb(190 120 255 / 0.22);
+  --color-text-primary: #f3eaff;
+  --color-text-secondary: #c9b6e6;
+  --color-text-tertiary: #8d76ab;
+  --color-text-accent: #c77dff;
+  --color-border-glass: rgb(190 120 255 / 0.14);
+  --color-border-strong: rgb(190 120 255 / 0.24);
+  --color-border-focus: #bf5af2;
+  --color-accent-blue: #7b5af2;
+  --color-accent-teal: #c77dff;
+  --color-accent-green: #5be49b;
+  --color-accent-orange: #ffb340;
+  --color-accent-red: #ff6961;
+  --color-accent-pink: #ff88c2;
+  --color-accent-purple: #bf5af2;
+}
+
+:root[data-theme="green"] {
+  --color-bg-base: #0e1510;
+  --color-bg-elevated: #18221b;
+  --color-bg-overlay: #202c23;
+  --color-bg-glass: rgb(80 255 150 / 0.05);
+  --color-bg-glass-strong: rgb(80 255 150 / 0.1);
+  --color-bg-glass-hover: rgb(80 255 150 / 0.15);
+  --color-bg-glass-active: rgb(80 255 150 / 0.2);
+  --color-text-primary: #eafaf0;
+  --color-text-secondary: #a9cfb6;
+  --color-text-tertiary: #6f9079;
+  --color-text-accent: #5be49b;
+  --color-border-glass: rgb(80 255 150 / 0.12);
+  --color-border-strong: rgb(80 255 150 / 0.22);
+  --color-border-focus: #30d158;
+  --color-accent-blue: #30d158;
+  --color-accent-teal: #5be49b;
+  --color-accent-green: #30d158;
+  --color-accent-orange: #ffd60a;
+  --color-accent-red: #ff453a;
+  --color-accent-pink: #ffb0d0;
+  --color-accent-purple: #9be46b;
+}
+
+:root[data-theme="ocean"] {
+  --color-bg-base: #0a1424;
+  --color-bg-elevated: #101f3a;
+  --color-bg-overlay: #162a4d;
+  --color-bg-glass: rgb(90 180 255 / 0.05);
+  --color-bg-glass-strong: rgb(90 180 255 / 0.1);
+  --color-bg-glass-hover: rgb(90 180 255 / 0.15);
+  --color-bg-glass-active: rgb(90 180 255 / 0.2);
+  --color-text-primary: #e6f2ff;
+  --color-text-secondary: #a8c6e8;
+  --color-text-tertiary: #6d8fb5;
+  --color-text-accent: #74d0ff;
+  --color-border-glass: rgb(90 180 255 / 0.12);
+  --color-border-strong: rgb(90 180 255 / 0.22);
+  --color-border-focus: #0a84ff;
+  --color-accent-blue: #0a84ff;
+  --color-accent-teal: #74d0ff;
+  --color-accent-green: #5be49b;
+  --color-accent-orange: #ffb340;
+  --color-accent-red: #ff453a;
+  --color-accent-pink: #ff9fd0;
+  --color-accent-purple: #a58bff;
+}
+
+:root[data-theme="sunset"] {
+  --color-bg-base: #1f1212;
+  --color-bg-elevated: #2e1a17;
+  --color-bg-overlay: #3a211c;
+  --color-bg-glass: rgb(255 140 90 / 0.06);
+  --color-bg-glass-strong: rgb(255 140 90 / 0.11);
+  --color-bg-glass-hover: rgb(255 140 90 / 0.16);
+  --color-bg-glass-active: rgb(255 140 90 / 0.22);
+  --color-text-primary: #fff0e8;
+  --color-text-secondary: #d8b3a4;
+  --color-text-tertiary: #a07d70;
+  --color-text-accent: #ffb340;
+  --color-border-glass: rgb(255 140 90 / 0.14);
+  --color-border-strong: rgb(255 140 90 / 0.24);
+  --color-border-focus: #ff9f0a;
+  --color-accent-blue: #ff9f0a;
+  --color-accent-teal: #ffb340;
+  --color-accent-green: #8cdd6a;
+  --color-accent-orange: #ff9f0a;
+  --color-accent-red: #ff6961;
+  --color-accent-pink: #ff9fd0;
+  --color-accent-purple: #d0a5ff;
+}
+
+:root[data-theme="graphite"] {
+  --color-bg-base: #17181c;
+  --color-bg-elevated: #23252b;
+  --color-bg-overlay: #2e3138;
+  --color-bg-glass: rgb(255 255 255 / 0.04);
+  --color-bg-glass-strong: rgb(255 255 255 / 0.08);
+  --color-bg-glass-hover: rgb(255 255 255 / 0.12);
+  --color-bg-glass-active: rgb(255 255 255 / 0.16);
+  --color-text-primary: #eef0f3;
+  --color-text-secondary: #b6bcc6;
+  --color-text-tertiary: #7c838e;
+  --color-text-accent: #9aa4b0;
+  --color-border-glass: rgb(255 255 255 / 0.08);
+  --color-border-strong: rgb(255 255 255 / 0.14);
+  --color-border-focus: #8e98a5;
+  --color-accent-blue: #8e98a5;
+  --color-accent-teal: #a6b0bc;
+  --color-accent-green: #9be46b;
+  --color-accent-orange: #e6b74c;
+  --color-accent-red: #ff6b61;
+  --color-accent-pink: #e79ab5;
+  --color-accent-purple: #a58bff;
+}
+
+/* ============================================
+   Glass surfaces — shared primitive classes
+   ============================================ */
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--color-bg-base);
+    color: var(--color-text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* App UI is chrome — only the code editor & terminal are selectable */
+  * {
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: default;
+  }
+}
+
+@layer base {
+  .cm-editor,
+  .cm-editor *,
+  .xterm,
+  .xterm * {
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
+  }
+
+  .lsp-hover {
+    max-width: 420px;
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--color-text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .cm-tooltip-lint {
+    border: 1px solid var(--color-border-glass) !important;
+    border-radius: 8px !important;
+    background: var(--color-bg-overlay) !important;
+    box-shadow: var(--shadow-glass-md);
+  }
+
+  .cm-diagnostic {
+    border-left: 2px solid var(--color-accent-red);
+  }
+
+  .cm-diagnostic-warning {
+    border-left-color: var(--color-accent-orange);
+  }
+
+  .cm-lint-marker-error {
+    color: var(--color-accent-red);
+  }
+
+  .cm-lint-marker-warning {
+    color: var(--color-accent-orange);
+  }
+
+  .breakpoint-marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+  }
+
+  .cm-breakpoint-gutter {
+    width: 18px;
+    border-right: 1px solid transparent;
+  }
+
+  .cm-git-gutter {
+    width: 6px;
+    margin-right: 2px;
+  }
+
+  .git-gutter-mark {
+    width: 3px;
+    height: 100%;
+    border-radius: 2px;
+  }
+
+  .git-gutter-added {
+    background: var(--color-accent-green);
+    opacity: 0.9;
+  }
+
+  .git-gutter-modified {
+    background: var(--color-accent-orange);
+    opacity: 0.9;
+  }
+
+  .git-gutter-deleted {
+    background: var(--color-accent-red);
+    min-height: 12px;
+    opacity: 0.9;
+  }
+
+  .lsp-hover-breakpoint {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--color-accent-red);
+  }
+}
+
+@layer components {
+  .glass {
+    background: var(--color-bg-glass);
+    backdrop-filter: blur(var(--blur-glass-md)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--blur-glass-md)) saturate(180%);
+    border: 1px solid var(--color-border-glass);
+  }
+
+  .glass-strong {
+    background: var(--color-bg-glass-strong);
+    backdrop-filter: blur(var(--blur-glass-md)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--blur-glass-md)) saturate(180%);
+    border: 1px solid var(--color-border-glass);
+  }
+
+  .glass-hover:hover {
+    background: var(--color-bg-glass-hover);
+    border-color: var(--color-border-strong);
+  }
+
+  .glass-active:active, .glass-active[data-active="true"] {
+    background: var(--color-bg-glass-active);
+    border-color: var(--color-accent-blue);
+  }
+
+  .glass-pill {
+    background: var(--color-bg-glass);
+    backdrop-filter: blur(var(--blur-glass-lg)) saturate(200%);
+    -webkit-backdrop-filter: blur(var(--blur-glass-lg)) saturate(200%);
+    border: 1px solid var(--color-border-glass);
+    box-shadow: var(--shadow-glass-pill);
+    border-radius: var(--radius-glass-pill);
+  }
+
+  .glass-panel {
+    background: var(--color-bg-glass);
+    backdrop-filter: blur(var(--blur-glass-md)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--blur-glass-md)) saturate(180%);
+    border: 1px solid var(--color-border-glass);
+    box-shadow: var(--shadow-glass-sm);
+    border-radius: var(--radius-glass-md);
+  }
+
+  .glass-modal {
+    background: var(--color-bg-glass-strong);
+    backdrop-filter: blur(var(--blur-glass-lg)) saturate(200%);
+    -webkit-backdrop-filter: blur(var(--blur-glass-lg)) saturate(200%);
+    border: 1px solid var(--color-border-glass);
+    box-shadow: var(--shadow-glass-lg);
+    border-radius: var(--radius-glass-lg);
+  }
+
+  /* Typography */
+  .text-mono {
+    font-family: var(--font-mono);
+    font-feature-settings: "ss01", "ss02", "ss03", "cv01", "cv02", "calr", "liga";
+  }
+
+  /* Focus ring — Apple-style glowing blue */
+  .focus-ring:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 1px;
+    border-radius: var(--radius-glass-sm);
+  }
+
+  /* Drag target indicator */
+  .drop-target {
+    outline: 2px dashed var(--color-accent-blue);
+    outline-offset: -2px;
+  }
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-left {
+  from { transform: translateX(-16px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(16px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.animate-scale-in {
+  animation: scale-in 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out forwards;
+}
+
+.animate-slide-left {
+  animation: slide-in-left 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-right {
+  animation: slide-in-right 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ============================================
+   Scrollbar — Apple thin style
+   ============================================ */
+@layer utilities {
+  .scrollbar-apple {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-text-tertiary) transparent;
+  }
+  .scrollbar-apple::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scrollbar-apple::-webkit-scrollbar-thumb {
+    background: rgba(255 255 255 / 0.15);
+    border-radius: 3px;
+  }
+  .scrollbar-apple::-webkit-scrollbar-thumb:hover {
+    background: rgba(255 255 255 / 0.25);
+  }
+  .scrollbar-apple::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* ============================================
+   Markdown preview — Apple-styled prose
+   ============================================ */
+@layer components {
+  .md-preview {
+    color: var(--color-text-primary);
+    font-size: 15px;
+    line-height: 1.7;
+    font-family: var(--font-sans);
+    max-width: 760px;
+  }
+  .md-preview > :first-child {
+    margin-top: 0;
+  }
+  .md-preview h1,
+  .md-preview h2,
+  .md-preview h3,
+  .md-preview h4,
+  .md-preview h5,
+  .md-preview h6 {
+    color: var(--color-text-primary);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 1.4em 0 0.6em;
+    line-height: 1.25;
+  }
+  .md-preview h1 {
+    font-size: 2em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--color-border-glass);
+  }
+  .md-preview h2 {
+    font-size: 1.5em;
+    padding-bottom: 0.25em;
+    border-bottom: 1px solid var(--color-border-glass);
+  }
+  .md-preview h3 {
+    font-size: 1.2em;
+  }
+  .md-preview h4 {
+    font-size: 1.05em;
+  }
+  .md-preview p {
+    margin: 0.6em 0;
+  }
+  .md-preview a {
+    color: var(--color-accent-teal);
+    text-decoration: none;
+  }
+  .md-preview a:hover {
+    text-decoration: underline;
+  }
+  .md-preview strong {
+    color: var(--color-text-primary);
+    font-weight: 600;
+  }
+  .md-preview em {
+    color: var(--color-text-secondary);
+  }
+  .md-preview ul,
+  .md-preview ol {
+    margin: 0.6em 0;
+    padding-left: 1.6em;
+  }
+  .md-preview li {
+    margin: 0.25em 0;
+  }
+  .md-preview li::marker {
+    color: var(--color-accent-orange);
+  }
+  .md-preview blockquote {
+    margin: 0.8em 0;
+    padding: 0.1em 1em;
+    border-left: 3px solid var(--color-accent-blue);
+    color: var(--color-text-secondary);
+    background: var(--color-bg-glass);
+    border-radius: 0 8px 8px 0;
+  }
+  .md-preview code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--color-bg-glass-strong);
+    border: 1px solid var(--color-border-glass);
+    padding: 0.1em 0.35em;
+    border-radius: 5px;
+    color: var(--color-accent-pink);
+  }
+  .md-preview pre {
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-glass);
+    border-radius: 10px;
+    padding: 1em 1.2em;
+    overflow-x: auto;
+    margin: 0.8em 0;
+  }
+  .md-preview pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--color-text-primary);
+    font-size: 0.85em;
+    line-height: 1.6;
+  }
+  .md-preview hr {
+    border: none;
+    border-top: 1px solid var(--color-border-glass);
+    margin: 1.5em 0;
+  }
+  .md-preview table {
+    border-collapse: collapse;
+    margin: 1em 0;
+    width: 100%;
+    font-size: 0.92em;
+  }
+  .md-preview th,
+  .md-preview td {
+    border: 1px solid var(--color-border-glass);
+    padding: 0.5em 0.8em;
+    text-align: left;
+  }
+  .md-preview th {
+    background: var(--color-bg-glass);
+    font-weight: 600;
+  }
+  .md-preview img {
+    max-width: 100%;
+    border-radius: 10px;
+    box-shadow: var(--shadow-glass-sm);
+  }
+  .md-preview del {
+    color: var(--color-text-tertiary);
+  }
+  .md-preview .task-list-item {
+    list-style: none;
+  }
+  .md-preview input[type="checkbox"] {
+    margin-right: 0.4em;
+    accent-color: var(--color-accent-blue);
+  }
+
+  .cm-ghost-text {
+    color: var(--color-text-tertiary);
+    opacity: 0.5;
+    font-style: italic;
+    pointer-events: none;
+    user-select: none;
+  }
+}
