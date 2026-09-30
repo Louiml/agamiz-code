@@ -178,22 +178,94 @@ describe('find and replace', () => {
 });
 
 describe('undo', () => {
-  it.fails('SHALL undo a programmatic edit', () => {
-    // No history exists today. The textarea is fully controlled, so every
-    // React `value` assignment clears the browser's native undo stack and
-    // Ctrl+Z stops working after the first keystroke. Fixed by 1.1.
-    //
-    // Asserting the *outcome* (onChange called with the pre-edit text) is what
-    // makes this a real marker — asserting only that the edit happened passes
-    // today and so proves nothing.
+  it('undoes a programmatic edit', () => {
+    // The editor is a fully controlled textarea, so React reassigns `value` on
+    // every change and the browser's native undo stack is cleared — Ctrl+Z used
+    // to do nothing at all. This is the regression net for the history added in
+    // 1.1.
     const { ta, onChange } = setup('one\ntwo');
     placeCaret(ta, 0);
     fireEvent.keyDown(ta, { key: 'd', ctrlKey: true });
-    expect(onChange).toHaveBeenCalledWith('one\none\ntwo'); // the edit happened
+    expect(onChange).toHaveBeenCalledWith('one\none\ntwo');
+
     onChange.mockClear();
     fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
-    // Undo should restore the buffer. Nothing calls onChange with it today.
     expect(onChange).toHaveBeenCalledWith('one\ntwo');
+  });
+
+  it('redoes an undone edit', () => {
+    const { ta, onChange } = setup('one\ntwo');
+    placeCaret(ta, 0);
+    fireEvent.keyDown(ta, { key: 'd', ctrlKey: true });
+    onChange.mockClear();
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(onChange).toHaveBeenLastCalledWith('one\ntwo');
+    onChange.mockClear();
+    fireEvent.keyDown(ta, { key: 'y', ctrlKey: true });
+    expect(onChange).toHaveBeenCalledWith('one\none\ntwo');
+  });
+
+  it('accepts Ctrl+Shift+Z as redo', () => {
+    const { ta, onChange } = setup('abc');
+    placeCaret(ta, 3);
+    fireEvent.change(ta, { target: { value: 'abcd' } });
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    onChange.mockClear();
+    fireEvent.keyDown(ta, { key: 'Z', ctrlKey: true, shiftKey: true });
+    expect(onChange).toHaveBeenCalledWith('abcd');
+  });
+
+  it('undoes a burst of typing as one step', () => {
+    const { ta, onChange } = setup('');
+    // One character at a time, as a real keyboard delivers it. Firing a single
+    // change with the finished word would be a paste, and the history
+    // deliberately refuses to coalesce a multi-character jump — otherwise one
+    // undo would remove a pasted block and the word typed before it together.
+    for (const partial of ['h', 'he', 'hel', 'hell', 'hello']) {
+      fireEvent.change(ta, { target: { value: partial } });
+    }
+    onChange.mockClear();
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(onChange).toHaveBeenCalledWith('');
+  });
+
+  it('does not coalesce a multi-character change into the preceding typing', () => {
+    const { ta, onChange } = setup('');
+    fireEvent.change(ta, { target: { value: 'ab' } }); // two keystrokes' worth
+    fireEvent.change(ta, { target: { value: 'ab LOTS OF TEXT' } }); // a paste
+    onChange.mockClear();
+    // Undo once removes only the paste.
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(onChange).toHaveBeenCalledWith('ab');
+    onChange.mockClear();
+    // Undo again removes the typing.
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(onChange).toHaveBeenCalledWith('');
+  });
+
+  it('does not undo a value that came from outside the editor', () => {
+    // A file switch or an agent write replaces `value` without passing through
+    // the editor. Ctrl+Z must not walk one buffer into another.
+    const { ta, onChange, rerender } = setup('original');
+    placeCaret(ta, 0);
+    fireEvent.change(ta, { target: { value: 'original!' } });
+    expect(onChange).toHaveBeenCalledWith('original!');
+
+    onChange.mockClear();
+    // Simulate the host swapping the file.
+    rerender(<CodeEditor {...({ value: 'a different file', onChange } as EditorProps)} />);
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('undoes a Tab insert', () => {
+    const { ta, onChange } = setup('x', { tabSize: 2 });
+    placeCaret(ta, 0);
+    fireEvent.keyDown(ta, { key: 'Tab' });
+    expect(onChange).toHaveBeenCalledWith('  x');
+    onChange.mockClear();
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(onChange).toHaveBeenCalledWith('x');
   });
 });
 

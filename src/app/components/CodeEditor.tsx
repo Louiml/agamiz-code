@@ -4,6 +4,7 @@ import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react'
 import EditorContextMenu from './EditorContextMenu';
 import { Icon, IconName } from './Icon';
 import { getSuggestions, Suggestion } from '../../languages/completion';
+import { EditorHistory } from '../features/editorHistory';
 import { lineAt, lineEndOffset, lineStartOffset, longestLine, normalizeBuffer, positionAt } from '../features/eol';
 import { RAK_KEYWORDS, RAK_TYPES } from '../../extensions/rak/language';
 
@@ -379,6 +380,102 @@ export default function CodeEditor({
   /** Caret row, tracked locally for relative line numbers and the line tint. */
   const [cursorLine, setCursorLine] = useState(1);
 
+  /* ---------------------------------------------------------------- */
+  /* Undo / redo                                                        */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * The textarea is fully controlled, so React reassigns `value` on every
+   * state change — and per the HTML spec that clears the browser's native undo
+   * stack. Ctrl+Z therefore stopped working after the first keystroke, and every
+   * programmatic edit (Tab, auto-close, duplicate line, replace) was
+   * indistinguishable from a manual one. The history model is in
+   * `features/editorHistory`; this is the plumbing.
+   */
+  // A lazy `useState` initialiser rather than a ref written during render: it
+  // runs exactly once, before the first paint, and is stable for the component's
+  // lifetime. Seeding it with the mount value matters — the effect below only
+  // fires when `value` *changes*, so an unseeded history would make the first
+  // undo a no-op on a freshly opened file.
+  const [history] = useState(() => {
+    const h = new EditorHistory();
+    h.reset(value);
+    return h;
+  });
+
+  /**
+   * The last value the editor itself emitted.
+   *
+   * A `value` prop that differs from this did not come from typing: it is a
+   * file switch, an external reload, or an agent write. Those must not be
+   * undoable, or Ctrl+Z would walk one buffer into another.
+   */
+  const lastEmittedRef = useRef(value);
+
+  // Reset whenever the buffer is replaced from outside.
+  const historyValueRef = useRef(value);
+  useEffect(() => {
+    if (historyValueRef.current === value) return;
+    historyValueRef.current = value;
+    const ta = textareaRef.current;
+    history.reset(value, ta?.selectionStart ?? 0, ta?.selectionEnd ?? ta?.selectionStart ?? 0);
+    lastEmittedRef.current = value;
+    // `history` is stable for the component's lifetime, so listing it costs
+    // nothing and keeps the effect honest.
+  }, [value, history]);
+
+  /**
+   * Apply an edit: publish it, record it, and remember it as ours.
+   *
+   * `anchor` is the caret position *before* the edit, which is what the
+   * history uses to decide whether the next change continues the same burst.
+   */
+  const commit = useCallback((next: string, anchor: number, caret = next.length) => {
+    lastEmittedRef.current = next;
+    history.push({ content: next, selectionStart: caret, selectionEnd: caret }, anchor, Date.now());
+    onChange(next);
+  }, [history, onChange]);
+
+  const undo = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const current = {
+      content: lastEmittedRef.current,
+      selectionStart: ta.selectionStart,
+      selectionEnd: ta.selectionEnd,
+    };
+    const target = history.undo(current);
+    if (!target) return;
+    lastEmittedRef.current = target.content;
+    onChange(target.content);
+    // Restore the caret after React has committed the new value; assigning it
+    // synchronously would be overwritten by the re-render.
+    setTimeout(() => {
+      if (!textareaRef.current) return;
+      const at = Math.min(target.selectionStart, target.content.length);
+      textareaRef.current.selectionStart = textareaRef.current.selectionEnd = at;
+    }, 0);
+  }, [history, onChange]);
+
+  const redo = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const current = {
+      content: lastEmittedRef.current,
+      selectionStart: ta.selectionStart,
+      selectionEnd: ta.selectionEnd,
+    };
+    const target = history.redo(current);
+    if (!target) return;
+    lastEmittedRef.current = target.content;
+    onChange(target.content);
+    setTimeout(() => {
+      if (!textareaRef.current) return;
+      const at = Math.min(target.selectionStart, target.content.length);
+      textareaRef.current.selectionStart = textareaRef.current.selectionEnd = at;
+    }, 0);
+  }, [history, onChange]);
+
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -444,7 +541,7 @@ export default function CodeEditor({
     const selected = ta.value.substring(ta.selectionStart, ta.selectionEnd);
     if (selected === findQuery) {
       const newValue = buffer.text.substring(0, ta.selectionStart) + replaceQuery + buffer.text.substring(ta.selectionEnd);
-      onChange(newValue);
+      commit(newValue, ta.selectionStart, ta.selectionStart + replaceQuery.length);
       setTimeout(() => {
         if (textareaRef.current) {
           const pos = ta.selectionStart + replaceQuery.length;
@@ -458,7 +555,10 @@ export default function CodeEditor({
   const replaceAll = () => {
     if (!findQuery) return;
     const newValue = buffer.text.split(findQuery).join(replaceQuery);
-    onChange(newValue);
+    if (newValue === buffer.text) return;
+    // Anchor at the first match, so undoing a replace-all is one step and the
+    // caret lands somewhere meaningful.
+    commit(newValue, Math.max(0, buffer.text.indexOf(findQuery)));
     setMatchCount(0);
   };
 
@@ -502,7 +602,9 @@ export default function CodeEditor({
     const newBefore = wordMatch ? before.substring(0, before.length - wordMatch[0].length) : before;
     const inserted = suggestion.body ?? suggestion.label;
     const newValue = newBefore + inserted + after;
-    onChange(newValue);
+    // Anchor at the start of the replaced word so a completion is its own undo
+    // step rather than merging into the typing that preceded it.
+    commit(newValue, newBefore.length, newBefore.length);
 
     // Land the caret on the first line of the body that is not a closing
     // delimiter, which is the blank line the fragment left for the user. The
@@ -554,21 +656,21 @@ export default function CodeEditor({
     const line = buffer.text.substring(start, end);
     if (line.trimStart().startsWith('//')) {
       const newLine = line.replace(/^\s*\/\/\s?/, '');
-      onChange(buffer.text.substring(0, start) + newLine + buffer.text.substring(end));
+      commit(buffer.text.substring(0, start) + newLine + buffer.text.substring(end), start, start);
     } else {
-      onChange(buffer.text.substring(0, start) + '// ' + line + buffer.text.substring(end));
+      commit(buffer.text.substring(0, start) + '// ' + line + buffer.text.substring(end), start, start);
     }
   };
 
   const duplicateLine = () => {
     const { start, end } = getLineBounds();
     const line = buffer.text.substring(start, end);
-    onChange(buffer.text.substring(0, start) + line + '\n' + line + buffer.text.substring(end));
+    commit(buffer.text.substring(0, start) + line + '\n' + line + buffer.text.substring(end), start, start);
   };
 
   const deleteLine = () => {
     const { start, end } = getLineBounds();
-    onChange(buffer.text.substring(0, start) + buffer.text.substring(Math.min(end + 1, buffer.text.length)));
+    commit(buffer.text.substring(0, start) + buffer.text.substring(Math.min(end + 1, buffer.text.length)), start, start);
   };
 
   const moveLine = (dir: number) => {
@@ -580,7 +682,9 @@ export default function CodeEditor({
     if (target < 0 || target >= next.length) return;
     const [line] = next.splice(lineIdx, 1);
     next.splice(target, 0, line);
-    onChange(next.join('\n'));
+    // A line move is not a contiguous edit, so it is always its own step: the
+    // anchor is the line start and the length delta is large.
+    commit(next.join('\n'), ta.selectionStart, ta.selectionStart);
   };
 
   const goToLine = (n: number) => {
@@ -609,6 +713,27 @@ export default function CodeEditor({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const mod = e.ctrlKey || e.metaKey;
+
+    // Undo / redo, before anything else claims the chord.
+    //
+    // The browser's own handlers cannot work here: React reassigns `value` on
+    // every change, which clears the native undo stack, so these would otherwise
+    // be no-ops. Ctrl+Shift+Z is accepted alongside Ctrl+Y because both are
+    // muscle memory and the two disagree between platforms.
+    if (mod && !e.altKey) {
+      const k = e.key.toLowerCase();
+      if (k === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redo(); else undo();
+        return;
+      }
+      if (k === 'y') {
+        e.preventDefault();
+        redo();
+        return;
+      }
+    }
+
     // Ctrl+/ - Toggle comment
     if (mod && e.key === '/') {
       e.preventDefault();
@@ -655,7 +780,7 @@ export default function CodeEditor({
       if (start === end) {
         e.preventDefault();
         const insert = e.key + autoCloseMap[e.key];
-        onChange(buffer.text.substring(0, start) + insert + buffer.text.substring(end));
+        commit(buffer.text.substring(0, start) + insert + buffer.text.substring(end), start, start + 1);
         setTimeout(() => {
           if (textareaRef.current) {
             textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + 1;
@@ -715,7 +840,7 @@ export default function CodeEditor({
       const start = e.currentTarget.selectionStart;
       const end = e.currentTarget.selectionEnd;
       const pad = ' '.repeat(tabSize);
-      onChange(buffer.text.substring(0, start) + pad + buffer.text.substring(end));
+      commit(buffer.text.substring(0, start) + pad + buffer.text.substring(end), start, start + tabSize);
       setTimeout(() => {
         if (textareaRef.current) {
           textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + tabSize;
@@ -733,7 +858,11 @@ export default function CodeEditor({
         e.preventDefault();
         const pad = ' '.repeat(tabSize);
         const insert = '\n' + indent + pad + '\n' + indent;
-        onChange(buffer.text.substring(0, start) + insert + buffer.text.substring(e.currentTarget.selectionEnd));
+        commit(
+          buffer.text.substring(0, start) + insert + buffer.text.substring(e.currentTarget.selectionEnd),
+          start,
+          start + 1 + indent.length + pad.length,
+        );
         setTimeout(() => {
           if (textareaRef.current) {
             const pos = start + 1 + indent.length + tabSize;
@@ -977,7 +1106,24 @@ export default function CodeEditor({
         <textarea
           ref={textareaRef}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            // The anchor is the caret position *before* this change. React's
+            // onChange fires after the DOM value is updated, so the previous
+            // caret has to be captured from the event's own selection tracking
+            // — `selectionStart` here is already the post-change position, and
+            // `lastEmittedRef` is the pre-change content.
+            const before = lastEmittedRef.current;
+            const next = e.target.value;
+            if (next === before) return;
+            // The change started where the old selection began. For a plain
+            // insertion that is the old caret; for a replacement it is the start
+            // of the replaced range. Deriving it from the length delta keeps
+            // both cases contiguous.
+            const delta = next.length - before.length;
+            const caret = e.target.selectionStart ?? next.length;
+            const anchor = Math.max(0, caret - Math.max(delta, 0));
+            commit(next, anchor, caret);
+          }}
           onKeyDown={handleKeyDown}
           onKeyUp={handleKeyUp}
           onScroll={syncScroll}
@@ -1031,10 +1177,13 @@ export default function CodeEditor({
               icon: 'scissors',
               action: () => {
                 const ta = textareaRef.current;
-                if (ta) {
-                  document.execCommand('cut');
-                  onChange(ta.value);
-                }
+                if (!ta) return;
+                // Capture the selection before `execCommand`, which collapses
+                // it. The anchor is where the removed text started, so the cut
+                // is one undo step.
+                const anchor = ta.selectionStart;
+                document.execCommand('cut');
+                if (ta.value !== buffer.text) commit(ta.value, anchor, anchor);
               },
             },
             {
@@ -1055,7 +1204,7 @@ export default function CodeEditor({
                   const start = ta.selectionStart;
                   const end = ta.selectionEnd;
                   const newValue = buffer.text.substring(0, start) + text + buffer.text.substring(end);
-                  onChange(newValue);
+                  commit(newValue, start, start + text.length);
                   setTimeout(() => {
                     if (textareaRef.current) {
                       const pos = start + text.length;
