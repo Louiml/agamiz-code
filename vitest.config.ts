@@ -2,16 +2,19 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    // These suites cover pure logic (tab bookkeeping, EOL math, terminal
-    // ratios, link providers) and the Rust-side path confinement tests run
-    // under `cargo test` — so a node environment is enough and keeps the
-    // suite fast.
+    // Default to node: the suite is mostly pure logic (tab bookkeeping, EOL
+    // math, path containment, terminal ratios, link providers) and jsdom is
+    // markedly slower. Component tests opt in per-file with a
+    // `@vitest-environment jsdom` docblock, which keeps the fast/slow split
+    // visible in the test file itself rather than hidden in a glob here.
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    globals: true,
+    setupFiles: ['./tools/vitest.setup.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       include: ['src/app/features/**/*.ts', 'src/app/components/terminal/**/*.ts'],
-      exclude: ['**/*.test.ts'],
+      exclude: ['**/*.test.{ts,tsx}'],
     },
   },
 });
