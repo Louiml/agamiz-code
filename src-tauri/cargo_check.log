@@ -1,0 +1,26 @@
+warning: app@0.7.2: rakc binary not found at D:\AgamizCode\ide-repo\src-tauri\../../target/release/rakc.exe
+warning: app@0.7.2: rakpkg binary not found at D:\AgamizCode\ide-repo\src-tauri\../../target/release/rakpkg.exe
+    Checking app v0.7.2 (D:\AgamizCode\ide-repo\src-tauri)
+warning: static `PROC_SEQ` is never used
+  --> src\lib.rs:51:8
+   |
+51 | static PROC_SEQ: AtomicU64 = AtomicU64::new(1);
+   |        ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused return value of `std::option::Option::<T>::insert` that must be used
+   --> src\lib.rs:641:9
+    |
+641 |         g.insert(child);
+    |         ^^^^^^^^^^^^^^^
+    |
+    = note: if you intended to set a value, consider assignment instead
+    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+641 |         let _ = g.insert(child);
+    |         +++++++
+
+warning: `app` (lib) generated 2 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.20s

@@ -1,0 +1,42 @@
+[package]
+name = "app"
+version = "0.7.2"
+description = "Agamiz Code - A Tauri 2 + Next.js desktop IDE with an extensible language/toolchain architecture"
+authors = ["Ryuzaki"]
+license = "MIT OR Apache-2.0"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.3", features = [] }
+tauri-plugin-log = "2"
+tauri-plugin-dialog = "2"
+# Cross-platform PTY (ConPTY on Windows, forkpty on Unix) for the terminal panel.
+portable-pty = "0.9"
+mlua = { version = "0.9.9", features = ["lua54", "vendored", "send", "serialize"] }
+zip = "4.2.0"
+notify = "8.2.0"
+ureq = { version = "3.2.1", default-features = false, features = ["rustls", "json"] }
+
+# Windows-only:
+#  - "Recent folders" jump list via SHAddToRecentDocs.
+#  - Thumbnail toolbar buttons (taskbar hover preview) via ITaskbarList3.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Console",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }

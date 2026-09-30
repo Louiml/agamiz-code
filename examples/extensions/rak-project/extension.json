@@ -1,0 +1,20 @@
+{
+  "name": "rak-project",
+  "displayName": "Rak Project Templates",
+  "version": "1.0.0",
+  "description": "Contributes a New Project template that scaffolds a Rak package with `rakc package init`.",
+  "author": "Agamiz Code",
+  "main": "extension.lua",
+  "files": [
+    "extension.lua"
+  ],
+  "activationEvents": [
+    "onStartup"
+  ],
+  "permissions": [
+    "fs:write",
+    "process:exec",
+    "ui:notification",
+    "workspace:read"
+  ]
+}

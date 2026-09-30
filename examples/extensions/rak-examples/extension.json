@@ -1,0 +1,19 @@
+{
+  "name": "rak-examples",
+  "displayName": "Rak Examples",
+  "version": "1.0.0",
+  "description": "Rak starter scripts, contributed as Command Palette entries.",
+  "author": "Agamiz Code",
+  "main": "extension.lua",
+  "files": [
+    "extension.lua",
+    "src/examples.lua",
+    "src/examples"
+  ],
+  "activationEvents": [
+    "onStartup"
+  ],
+  "permissions": [
+    "ui:notification"
+  ]
+}

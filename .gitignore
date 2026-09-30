@@ -1,0 +1,61 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+
+# Next.js regenerates this on `next dev` / `next build`, but it declares the
+# app-directory type surface. Committing it means a fresh clone type-checks in an
+# editor before the dev server has ever run.
+!next-env.d.ts
+
+# local dev-server logs
+next-dev.log
+next-err.log
+
+# Rust
+# `src-tauri/.gitignore` covers `/target/` (17+ GB of build output) and
+# `/gen/schemas`. Declared here too so a Rust-only checkout is covered even if
+# that file is ever lost.
+src-tauri/target/
+src-tauri/gen/
+
+# editors
+.vscode/*
+!.vscode/extensions.json
+.idea/

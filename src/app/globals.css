@@ -1,0 +1,282 @@
+@import "tailwindcss";
+
+:root {
+  --background: var(--ag-bg);
+  --foreground: var(--ag-fg);
+}
+
+/* ------------------------------------------------------------------ */
+/* Palette layer 1 — runtime-swappable source of truth.                 */
+/*                                                                     */
+/* Why this layer exists: Tailwind v4's `@theme inline` substitutes the  */
+/* declared *value* into every utility, so `@theme inline { --color-ide-  */
+/* bg: #0d1117 }` compiles to `.bg-ide-bg{background-color:#0d1117}` — a  */
+/* literal. Nothing at runtime could ever re-theme it. Declaring the real */
+/* values here as plain custom properties and letting `@theme inline`    */
+/* forward a `var()` reference keeps every existing `bg-ide-*` /         */
+/* `text-ide-*` / `border-ide-*` utility working *and* swappable:       */
+/* `features/settings/themes.ts` rewrites these properties on            */
+/* `<html>` and the entire IDE re-themes in one frame, no re-render.     */
+/* ------------------------------------------------------------------ */
+:root {
+  /* Surfaces — Agamiz Dark (default) */
+  --ag-bg: #0d1117;
+  --ag-raised: #161b22;
+  --ag-hover: #1c2128;
+  --ag-active: #262c36;
+  --ag-border: #21262d;
+  --ag-border-soft: #1a1f24;
+
+  /* Text */
+  --ag-fg: #e6edf3;
+  --ag-muted: #8b949e;
+  --ag-faint: #484f58;
+
+  /* Accent — overridden by the accent picker */
+  --ag-accent: #10b981;
+  --ag-accent-bright: #00e676;
+  --ag-accent-contrast: #04140d;
+  --ag-selection: #10b98126;
+
+  /* Editor chrome */
+  --ag-editor-bg: #0d1117;
+  --ag-gutter-bg: #0d1117;
+  --ag-gutter-fg: #484f58;
+  --ag-gutter-border: #21262d;
+  --ag-caret: #00e676;
+  --ag-active-line: #ffffff08;
+  --ag-indent-guide: #30363d;
+  --ag-whitespace: #3d444d;
+
+  /* Syntax tokens. Values mirror the previous hard-coded Tailwind classes
+     so the default theme is pixel-identical to the pre-settings UI. */
+  --ag-syn-keyword: #c084fc;
+  --ag-syn-type: #22d3ee;
+  --ag-syn-number: #fdba74;
+  --ag-syn-number-emph: #fdba74;
+  --ag-syn-string: #4ade80;
+  --ag-syn-regex: #fb7185;
+  --ag-syn-char: #fbbf24;
+  --ag-syn-comment: #6b7280;
+  --ag-syn-operator: #f472b6;
+  --ag-syn-macro: #7dd3fc;
+  --ag-syn-macro-inv: #6ee7b7;
+  --ag-syn-ident: #e4e4e7;
+  --ag-syn-default: #d4d4d8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* ------------------------------------------------------------------ */
+/* IDE surface theme tokens — see palette layer 1 for why they forward */
+/* to a variable instead of a literal.                                  */
+/* usage: bg-ide-bg / bg-ide-raised / border-ide-border / text-ide-fg  */
+/*        accent: bg-ide-accent / text-ide-accent-bright                */
+/* ------------------------------------------------------------------ */
+@theme inline {
+  --color-ide-bg: var(--ag-bg);
+  --color-ide-raised: var(--ag-raised);
+  --color-ide-hover: var(--ag-hover);
+  --color-ide-active: var(--ag-active);
+  --color-ide-border: var(--ag-border);
+  --color-ide-border-soft: var(--ag-border-soft);
+  --color-ide-fg: var(--ag-fg);
+  --color-ide-muted: var(--ag-muted);
+  --color-ide-faint: var(--ag-faint);
+  --color-ide-accent: var(--ag-accent);
+  --color-ide-accent-bright: var(--ag-accent-bright);
+  --color-ide-accent-contrast: var(--ag-accent-contrast);
+  --color-ide-selection: var(--ag-selection);
+  --color-ide-editor-bg: var(--ag-editor-bg);
+  --color-ide-caret: var(--ag-caret);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  /* `uiScale` (Appearance settings) is a root-relative font size; every
+     `rem`-based Tailwind utility and the editor's px metrics scale with it. */
+  font-size: calc(16px * var(--ag-ui-scale, 1));
+}
+
+/* Shared UI primitives */
+.ide-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ag-border) transparent;
+}
+.ide-scrollbar::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+.ide-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--ag-faint);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.ide-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--ag-muted); background-clip: content-box; }
+.ide-scrollbar::-webkit-scrollbar-corner { background: transparent; }
+
+/* Smooth width transition for the collapsible sidebar */
+@keyframes ide-panel-slide {
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.ide-panel-enter {
+  animation: ide-panel-slide 140ms ease-out;
+}
+
+/* Settings Center enter/exit. Two frames of opacity+translate reads as a
+   cross-fade on a 140ms curve without pulling in a motion library. */
+@keyframes settings-center-in {
+  from { opacity: 0; transform: translate(-50%, -48%) scale(0.985); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+.settings-center-enter { animation: settings-center-in 150ms cubic-bezier(0.16, 1, 0.3, 1); }
+
+@keyframes settings-scrim-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.settings-scrim-enter { animation: settings-scrim-in 120ms ease-out; }
+
+@keyframes settings-row-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.settings-row-enter { animation: settings-row-in 140ms ease-out both; }
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ag-faint);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ag-muted);
+}
+
+/* Selection styling */
+::selection {
+  background: var(--ag-selection);
+  color: var(--ag-fg);
+}
+
+/* ------------------------------------------------------------------ */
+/* Settings Center controls                                            */
+/* ------------------------------------------------------------------ */
+
+/* Range inputs: WebKit/Blink have no themable track, so both the track and
+   the filled portion are painted with a gradient driven by --ag-accent.
+   Firefox uses accent-color, which the `accent-accent` utility already maps. */
+.ide-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--ag-accent) 0%,
+    var(--ag-accent) var(--ag-slider-pct, 50%),
+    var(--ag-active) var(--ag-slider-pct, 50%),
+    var(--ag-active) 100%
+  );
+  cursor: pointer;
+  outline: none;
+}
+.ide-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: var(--ag-fg);
+  border: 3px solid var(--ag-accent);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  transition: transform 90ms ease;
+}
+.ide-slider:hover::-webkit-slider-thumb { transform: scale(1.15); }
+.ide-slider:active::-webkit-slider-thumb { transform: scale(1.25); }
+.ide-slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--ag-selection); }
+.ide-slider::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: var(--ag-fg);
+  border: 3px solid var(--ag-accent);
+}
+.ide-slider:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Native colour swatch: strip the default chrome so the picker is a clean
+   rounded chip that matches the rest of the settings controls. */
+.ide-color-input {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.ide-color-input::-webkit-color-swatch-wrapper { padding: 0; }
+.ide-color-input::-webkit-color-swatch { border: 1px solid var(--ag-border); border-radius: 6px; }
+.ide-color-input::-moz-color-swatch { border: 1px solid var(--ag-border); border-radius: 6px; }
+
+/* Text inputs that host an absolute-positioned leading icon. */
+.ide-field-icon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--ag-faint);
+}
+
+/* While a sidebar/terminal divider drag is active, suppress text selection and
+   force the drag cursor everywhere so the WebView doesn't start a selection or
+   native drag that fights the resize. Toggled from the resize handlers. */
+body.drag-resizing-col,
+body.drag-resizing-col * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+body.drag-resizing-row,
+body.drag-resizing-row * {
+  cursor: row-resize !important;
+  user-select: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-center-enter,
+  .settings-scrim-enter,
+  .settings-row-enter,
+  .ide-panel-enter {
+    animation: none;
+  }
+  * {
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Appearance ▸ Reduced motion. Mirrors the `prefers-reduced-motion` block
+   above for users who want it without changing an OS-level setting. */
+.ag-reduce-motion *,
+.ag-reduce-motion *::before,
+.ag-reduce-motion *::after {
+  transition-duration: 1ms !important;
+  animation-duration: 1ms !important;
+}

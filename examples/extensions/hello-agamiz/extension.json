@@ -1,0 +1,23 @@
+{
+  "name": "hello-agamiz",
+  "displayName": "Hello Agamiz",
+  "version": "1.0.0",
+  "description": "Sample extension: contributes a command, a status bar item and a sidebar panel.",
+  "author": "Agamiz Code",
+  "repository": "https://github.com/example/hello-agamiz",
+  "main": "extension.lua",
+  "files": [
+    "extension.lua",
+    "src/utils.lua"
+  ],
+  "activationEvents": [
+    "onCommand:hello-agamiz.greet",
+    "onStartup"
+  ],
+  "permissions": [
+    "ui:notification",
+    "ui:statusbar",
+    "ui:sidebar",
+    "workspace:read"
+  ]
+}

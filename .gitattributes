@@ -1,0 +1,23 @@
+# Normalize line endings in the repository; check them out per-platform.
+#
+# Without this, Git's `core.autocrlf` default on Windows rewrites every LF to
+# CRLF on checkout, so a Rust or shell script edited on Windows and on Linux
+# produces a whole-file diff with no semantic change. Pinning the behaviour here
+# keeps the index canonical and the worktree honest.
+
+* text=auto eol=lf
+
+# Windows-native sources that genuinely require CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Keep these byte-exact. The bundled Rak toolchain is a real executable, and
+# text normalization would corrupt it.
+src-tauri/resources/rakc binary
+src-tauri/resources/rakc.exe binary
+src-tauri/resources/rakpkg binary
+src-tauri/resources/rakpkg.exe binary
+*.png binary
+*.ico binary
+*.icns binary
