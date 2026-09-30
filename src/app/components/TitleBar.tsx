@@ -4,14 +4,28 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { Window as TauriWindow } from '@tauri-apps/api/window';
 import { diagTauriBridge, isTauri, errText, safeUnlisten } from '../lib/tauri';
+import { workspaceName } from '../features/paths';
 
-export default function TitleBar() {
+export interface TitleBarProps {
+  /**
+   * The opened workspace root, as a path.
+   *
+   * Optional because the title bar is also rendered on the welcome screen,
+   * where there is no workspace yet and the name is simply omitted.
+   */
+  workspacePath?: string;
+}
+
+export default function TitleBar({ workspacePath }: TitleBarProps = {}) {
   const [isMaximized, setIsMaximized] = useState(false);
   // Transient, VISIBLE explanation when a window action cannot run. Turns
   // "button does nothing" into a concrete reason (plain browser tab vs. a
   // denied IPC call) without opening DevTools.
   const [notice, setNotice] = useState<string | null>(null);
   const noticeTimer = useRef<number | null>(null);
+
+  // Empty when no workspace is open, which is what hides the name entirely.
+  const workspace = workspaceName(workspacePath ?? '');
 
   const showNotice = useCallback((msg: string) => {
     setNotice(msg);
@@ -106,6 +120,20 @@ export default function TitleBar() {
       <div className="flex items-center gap-2 px-3">
         <span className="text-emerald-500 font-bold text-sm">A</span>
         <span className="text-zinc-400 text-xs">Agamiz Code</span>
+        {workspace && (
+          <>
+            <span className="text-zinc-700 text-xs" aria-hidden="true">—</span>
+            {/* The name is what fits; the full path is one hover away. The
+                separator is a slash and not the platform one because this is a
+                title bar, not a path in an editor. */}
+            <span
+              className="text-zinc-300 text-xs truncate max-w-[40vw]"
+              title={workspacePath}
+            >
+              {workspace}
+            </span>
+          </>
+        )}
         <span className="text-zinc-700 text-[10px]">v0.7</span>
       </div>
 

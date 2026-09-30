@@ -103,3 +103,27 @@ export function resolveWithin(root: string, requested: string): string {
   if (!isWithinRoot(resolved, root)) throw new PathEscapeError(requested, root);
   return resolved;
 }
+
+/**
+ * The folder name to show for an opened workspace root.
+ *
+ * Deliberately not a filesystem call: the root is already a string in app
+ * state, and a display label should not depend on the disk still being there.
+ * Both separators are accepted because a path can arrive from the OS picker
+ * (native separators) or from a restored session (whatever was saved).
+ *
+ * Returns `''` when there is no workspace or the root is a filesystem root,
+ * which is the "show nothing extra" case in the title bar.
+ */
+export function workspaceName(root: string): string {
+  const trimmed = root.trim();
+  if (trimmed === '') return '';
+  // Trailing separators are stripped first so `C:\work\app\` is `app` and not
+  // the empty segment after the last separator.
+  const stripped = trimmed.replace(/[\\/]+$/, '');
+  if (stripped === '') return ''; // `/` or `C:\`
+  const cut = Math.max(stripped.lastIndexOf('/'), stripped.lastIndexOf('\\'));
+  const name = stripped.slice(cut + 1);
+  // A bare drive letter (`C:`) is a name, not an empty one.
+  return name === '' ? stripped : name;
+}

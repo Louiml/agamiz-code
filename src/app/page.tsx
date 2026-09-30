@@ -1718,7 +1718,7 @@ export default function IDE() {
 
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100 font-mono overflow-hidden">
-      <TitleBar />
+      <TitleBar workspacePath={currentPath} />
 
       {/* Menu + Action toolbar */}
       <div className="flex items-center justify-between bg-ide-raised border-b border-ide-border h-8 shrink-0 select-none">

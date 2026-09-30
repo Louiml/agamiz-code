@@ -6,6 +6,7 @@ import {
   normalizeSegments,
   resolveWithin,
   separatorOf,
+  workspaceName,
 } from './paths';
 
 describe('isAbsolutePath', () => {
@@ -132,5 +133,47 @@ describe('resolveWithin', () => {
   it('works with a POSIX root', () => {
     expect(resolveWithin('/home/u/app', 'src/a.ts')).toBe('/home/u/app/src/a.ts');
     expect(() => resolveWithin('/home/u/app', '../../etc/passwd')).toThrow(PathEscapeError);
+  });
+});
+
+describe('workspaceName', () => {
+  it('takes the last segment of a POSIX root', () => {
+    expect(workspaceName('/home/u/projects/agamiz-code')).toBe('agamiz-code');
+  });
+
+  it('takes the last segment of a Windows root', () => {
+    expect(workspaceName('C:\\Users\\u\\Documents\\agamiz-code')).toBe('agamiz-code');
+  });
+
+  it('ignores a trailing separator', () => {
+    // The picker can hand back either form; without this the name is the empty
+    // segment after the last separator.
+    expect(workspaceName('/home/u/app/')).toBe('app');
+    expect(workspaceName('C:\\work\\app\\')).toBe('app');
+  });
+
+  it('is empty when there is no workspace', () => {
+    // The welcome screen renders the title bar with no prop at all.
+    expect(workspaceName('')).toBe('');
+    expect(workspaceName('   ')).toBe('');
+  });
+
+  it('is empty for the POSIX filesystem root, which has no name', () => {
+    expect(workspaceName('/')).toBe('');
+  });
+
+  it('keeps a drive root as its drive letter', () => {
+    // Opening a whole drive is legitimate, and `C:` is the only name it has.
+    // This is why the POSIX root above and this case differ.
+    expect(workspaceName('C:\\')).toBe('C:');
+    expect(workspaceName('C:')).toBe('C:');
+  });
+
+  it('handles a single-segment path', () => {
+    expect(workspaceName('app')).toBe('app');
+  });
+
+  it('does not mistake a dot in a folder name for a separator', () => {
+    expect(workspaceName('/home/u/my.project')).toBe('my.project');
   });
 });
