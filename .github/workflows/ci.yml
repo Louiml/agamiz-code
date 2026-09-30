@@ -1,0 +1,71 @@
+name: CI
+
+# Two independent gates. The web and Rust trees barely touch each other, so a
+# Rust failure should not hide a TypeScript one.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push supersedes an in-flight run for the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  web:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Fails when the error count exceeds lint-baseline.json. The repository
+      # carries 44 known errors; the point is that the number cannot grow.
+      - name: Lint (baseline gate)
+        run: npm run lint:check
+
+      - name: Unit tests
+        run: npm test
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Format
+        working-directory: src-tauri
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        working-directory: src-tauri
+        # Clean as of this commit. `-D warnings` is the gate; if it ever fires,
+        # fix the cause rather than adding an `#[allow]` without a reason.
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        working-directory: src-tauri
+        run: cargo test --lib

@@ -12,6 +12,13 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Cargo's build directory. It holds ~17 GB of generated JS alongside the
+    // Rust artifacts, including per-build Tauri codegen output that ESLint
+    // cannot parse — walking it makes a plain `eslint` run take minutes.
+    "src-tauri/target/**",
+    "src-tauri/gen/**",
+    // Bundled toolchain binaries and lockfile churn.
+    "coverage/**",
   ]),
 ]);
 

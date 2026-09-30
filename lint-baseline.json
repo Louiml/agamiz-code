@@ -1,0 +1,12 @@
+{
+  "$comment": "Remaining lint debt in src/, checked by tools/check-eslint-baseline.mjs. Lower these numbers in the same commit that fixes the problems — this file is a record of what is left, not permission to add more. See .github/workflows/ci.yml.",
+  "maxErrors": 44,
+  "maxWarnings": 16,
+  "known": {
+    "src/extensions/lua/lua.ts": "18 errors, all no-explicit-any. A TypeScript Lua 5.1 interpreter with zero importers that shadows the real mlua host in src-tauri/src/ext/. Deleting it clears most of this file's debt in one move.",
+    "src/app/page.tsx": "7 errors / 7 warnings: sessionRefs written during render, mount-time localStorage hydration, and exhaustive-deps notes. All pre-existing.",
+    "src/app/features/debug.ts": "6 no-explicit-any on the CDP WebSocket payloads, which the protocol genuinely leaves untyped.",
+    "src/app/features/lsp.ts": "5 errors / 1 warning. Nearly all of this file is dead code (LSPClient is never instantiated) — wiring or deleting it resolves them.",
+    "note": "An earlier count of 107 errors was wrong: `eslint` with no path argument was walking src-tauri/target/, whose ~17 GB of generated JavaScript produced parse errors. src-tauri/target is now in the global ignores."
+  }
+}
