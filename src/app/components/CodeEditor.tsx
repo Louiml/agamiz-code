@@ -5,6 +5,7 @@ import EditorContextMenu from './EditorContextMenu';
 import { Icon, IconName } from './Icon';
 import { getSuggestions, Suggestion } from '../../languages/completion';
 import { EditorHistory } from '../features/editorHistory';
+import { indentBlock, outdentBlock } from '../features/indent';
 import { lineAt, lineEndOffset, lineStartOffset, longestLine, normalizeBuffer, positionAt } from '../features/eol';
 import { RAK_KEYWORDS, RAK_TYPES } from '../../extensions/rak/language';
 
@@ -18,6 +19,13 @@ interface CodeEditorProps {
   fontSize?: number;
   tabSize?: number;
   autoClose?: boolean;
+  /**
+   * Indent with `tabSize` spaces (true) or a tab character (false).
+   *
+   * Backed by the `editor.insertSpaces` setting, which was declared and
+   * editable but had no reader anywhere — so changing it did nothing.
+   */
+  insertSpaces?: boolean;
   /* --- Appearance (settings-driven) --- */
   /** CSS font stack for the code area. */
   fontFamily?: string;
@@ -291,6 +299,7 @@ export default function CodeEditor({
   value, onChange, onRun, onCursorChange,
   languageId,
   fontSize = 14, tabSize = 4, autoClose = true,
+  insertSpaces = true,
   fontFamily = 'var(--font-geist-mono), ui-monospace, monospace',
   ligatures = false,
   lineHeight: lineHeightScale = 1.45,
@@ -839,11 +848,18 @@ export default function CodeEditor({
       e.preventDefault();
       const start = e.currentTarget.selectionStart;
       const end = e.currentTarget.selectionEnd;
-      const pad = ' '.repeat(tabSize);
-      commit(buffer.text.substring(0, start) + pad + buffer.text.substring(end), start, start + tabSize);
+      // `insertSpaces` is an editor setting that existed but was never read;
+      // without a consumer, "Insert spaces" in the settings panel did nothing.
+      const unit = insertSpaces ? ' '.repeat(tabSize) : '\t';
+      const result = e.shiftKey
+        ? outdentBlock(buffer.text, start, end, { unit })
+        : indentBlock(buffer.text, start, end, { unit });
+      if (!result.changed) return;
+      commit(result.text, start, result.selectionStart);
       setTimeout(() => {
         if (textareaRef.current) {
-          textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + tabSize;
+          textareaRef.current.selectionStart = result.selectionStart;
+          textareaRef.current.selectionEnd = result.selectionEnd;
         }
       }, 0);
       return;
@@ -856,7 +872,11 @@ export default function CodeEditor({
       const lastChar = before.trim().slice(-1);
       if (lastChar === '{') {
         e.preventDefault();
-        const pad = ' '.repeat(tabSize);
+        // Match the unit the line already uses, falling back to the setting. A
+        // file indented with tabs should keep getting tabs here even when
+        // `insertSpaces` is on, and vice versa.
+        const unit = indent.includes('\t') ? '\t' : (insertSpaces ? ' '.repeat(tabSize) : '\t');
+        const pad = unit;
         const insert = '\n' + indent + pad + '\n' + indent;
         commit(
           buffer.text.substring(0, start) + insert + buffer.text.substring(e.currentTarget.selectionEnd),
@@ -865,7 +885,7 @@ export default function CodeEditor({
         );
         setTimeout(() => {
           if (textareaRef.current) {
-            const pos = start + 1 + indent.length + tabSize;
+            const pos = start + 1 + indent.length + pad.length;
             textareaRef.current.selectionStart = textareaRef.current.selectionEnd = pos;
           }
         }, 0);

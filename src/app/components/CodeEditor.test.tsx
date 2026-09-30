@@ -129,15 +129,57 @@ describe('Tab and Shift+Tab', () => {
   });
 
   // `it.fails` marks a known-broken behaviour: the suite stays green while the
-  // bug is present and *fails loudly* the moment it is fixed, which is the
-  // signal to change it back to a plain `it`.
-  it.fails('SHALL outdent on Shift+Tab', () => {
-    // No shiftKey check today, so Shift+Tab inserts another indent instead of
-    // removing one. Data corruption, not a missing feature. Fixed by 1.2.
+  // bug is present and *fails loudly* the moment it is fixed, which is the cue
+  // to flip it back to a plain `it`.
+  it('outdents on Shift+Tab', () => {
+    // There was no shiftKey check, so Shift+Tab inserted another indent instead
+    // of removing one — data corruption, not a missing feature. Fixed by 1.2.
     const { ta, onChange } = setup('    indented', { tabSize: 4 });
     placeCaret(ta, 4);
     fireEvent.keyDown(ta, { key: 'Tab', shiftKey: true });
     expect(onChange).toHaveBeenCalledWith('indented');
+  });
+
+  it('outdents every line a multi-line selection spans', () => {
+    const { ta, onChange } = setup('    a\n    b\nc', { tabSize: 4 });
+    ta.setSelectionRange(0, 11);
+    fireEvent.select(ta);
+    fireEvent.keyDown(ta, { key: 'Tab', shiftKey: true });
+    expect(onChange).toHaveBeenCalledWith('a\nb\nc');
+  });
+
+  it('indents every line a multi-line selection spans', () => {
+    // Block indent did not exist: Tab collapsed the selection and inserted one
+    // indent at the caret.
+    const { ta, onChange } = setup('a\nb\nc', { tabSize: 4 });
+    ta.setSelectionRange(0, 3);
+    fireEvent.select(ta);
+    fireEvent.keyDown(ta, { key: 'Tab' });
+    expect(onChange).toHaveBeenCalledWith('    a\n    b\nc');
+  });
+
+  it('outdent is a no-op on an unindented line', () => {
+    const { ta, onChange } = setup('flat', { tabSize: 4 });
+    placeCaret(ta, 2);
+    fireEvent.keyDown(ta, { key: 'Tab', shiftKey: true });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('outdent can be undone', () => {
+    const { ta, onChange } = setup('    indented', { tabSize: 4 });
+    placeCaret(ta, 4);
+    fireEvent.keyDown(ta, { key: 'Tab', shiftKey: true });
+    expect(onChange).toHaveBeenLastCalledWith('indented');
+    onChange.mockClear();
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(onChange).toHaveBeenCalledWith('    indented');
+  });
+
+  it('indents with a tab character when insertSpaces is off', () => {
+    const { ta, onChange } = setup('a', { tabSize: 4, insertSpaces: false });
+    placeCaret(ta, 0);
+    fireEvent.keyDown(ta, { key: 'Tab' });
+    expect(onChange).toHaveBeenCalledWith('\ta');
   });
 });
 

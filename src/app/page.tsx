@@ -1858,8 +1858,9 @@ export default function IDE() {
               onToggleBreakpoint={handleToggleBreakpoint}
               fontSize={settingsState.editor.fontSize}
               lineHeight={settingsState.editor.lineHeight}
-              tabSize={settingsState.editor.tabSize}
-              autoClose={settingsState.editor.autoClose}
+            tabSize={settingsState.editor.tabSize}
+            autoClose={settingsState.editor.autoClose}
+            insertSpaces={settingsState.editor.insertSpaces !== false}
               fontFamily={settingsState.appearance.editorFontFamily}
               ligatures={settingsState.appearance.editorFontLigatures}
               lineNumbers={settingsState.editor.lineNumbers}
