@@ -1,5 +1,6 @@
 import { LanguageDef, Token, TokenType } from './types';
 import { getLanguage } from './registry';
+import { registerBuiltinLanguages } from './builtin';
 
 /**
  * A generic, data-driven, stateful syntax tokenizer for any language in the
@@ -347,7 +348,7 @@ function scanLine(line: string, lang: LanguageDef, L: Lookups, state: CarryState
     // the operator branch unchanged.
     if (lang.regexLiteral && c === '/' && !canEndExpr(lastSig(out))) {
       const r = readRegex(line, i);
-      if (r) { out.push({ type: 'string', value: r.value }); i = r.end; continue; }
+      if (r) { out.push({ type: 'regex', value: r.value }); i = r.end; continue; }
     }
 
     // operators / punctuation
@@ -387,8 +388,44 @@ function scanLine(line: string, lang: LanguageDef, L: Lookups, state: CarryState
  * Tokenize a complete buffer into per-line token arrays. The returned array
  * always has one entry per logical line of `text`.
  */
+/**
+ * Populated on first use, so the tokenizer is correct at any call time.
+ *
+ * Extensions are normally activated from a `useEffect` in the app shell, which
+ * runs *after* the editor's first render. Without this, that first render
+ * tokenized against an empty registry and cached plain-text tokens that were
+ * never recomputed, because the memo's dependencies had not changed.
+ *
+ * `registerBuiltinLanguages` is idempotent — it only fills gaps in its lookup
+ * tables — so calling it eagerly here is harmless if activation happens later.
+ */
+let ensured = false;
+function ensureLanguages(): void {
+  if (ensured) return;
+  ensured = true;
+  registerBuiltinLanguages();
+}
+
+/**
+ * Fallback for an unknown language.
+ *
+ * Deliberately empty rather than a guess: highlighting a `.xyz` file as if it
+ * were JavaScript is worse than not highlighting it, and this keeps the editor
+ * rendering for any file the registry does not know about.
+ */
+const PLAIN: LanguageDef = {
+  id: 'plaintext',
+  name: 'Plain Text',
+  extensions: [],
+  lineComments: [],
+  blockComments: [],
+  strings: [],
+  keywords: [],
+};
+
 export function tokenize(text: string, langId: string | undefined): Token[][] {
-  const lang = getLanguage(langId) ?? getLanguage('plaintext')!;
+  ensureLanguages();
+  const lang = getLanguage(langId) ?? getLanguage('plaintext') ?? PLAIN;
   const L = makeLookups(lang);
   // Starts empty: the loop below pushes one entry per line, so seeding `[[]]`
   // for an empty document produced *two* entries for a one-line file, breaking

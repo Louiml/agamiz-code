@@ -221,10 +221,22 @@ describe('auto-close', () => {
   });
 
   it('does not auto-close inside a comment', () => {
-    const { ta, onChange } = setup('// note');
+    // The language has to be declared. The editor used to consult a Rak-only
+    // tokenizer that treated // as a comment whatever the file was, so this
+    // passed without ever exercising the real language definition. With the
+    // registry wired in, a file with no language has no comments at all.
+    const { ta, onChange } = setup('// note', { languageId: 'javascript' });
     placeCaret(ta, 5); // inside the comment
     fireEvent.keyDown(ta, { key: '(' });
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('does not give an unrecognised language Rak comment syntax', () => {
+    // The counterpart to the test above, and the reason it needed one.
+    const { ta, onChange } = setup('// note');
+    placeCaret(ta, 5);
+    fireEvent.keyDown(ta, { key: '(' });
+    expect(onChange).toHaveBeenCalled();
   });
 });
 

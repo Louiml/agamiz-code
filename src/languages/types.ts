@@ -14,6 +14,7 @@ export type TokenType =
   | 'number'    // integer / hex / binary / typed numbers
   | 'float'     // floating point numbers
   | 'string'    // string literals (incl. template / interpolation / bytes)
+  | 'regex'     // regex literals (JS/Rak-family only)
   | 'char'      // character literals
   | 'comment'   // line / block comments
   | 'ident'     // ordinary identifiers

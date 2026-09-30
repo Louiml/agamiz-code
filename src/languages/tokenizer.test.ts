@@ -151,13 +151,13 @@ describe('regex literals', () => {
   // tokenizer, so a regex was highlighted as a run of identifiers and operators.
   it('scans a regex in operand position', () => {
     const out = tokenize('let re = /ab+c/gi;', 'rak');
-    const strings = out[0]?.filter((t) => t.type === 'string') ?? [];
-    expect(strings.map((t) => t.value)).toContain('/ab+c/gi');
+    const regexes = out[0]?.filter((t) => t.type === 'regex') ?? [];
+    expect(regexes.map((t) => t.value)).toContain('/ab+c/gi');
   });
 
   it('scans a regex after an opening paren', () => {
     const out = tokenize('f(/x+/);', 'javascript');
-    expect(out[0]?.some((t) => t.type === 'string' && t.value === '/x+/')).toBe(true);
+    expect(out[0]?.some((t) => t.type === 'regex' && t.value === '/x+/')).toBe(true);
   });
 
   it('treats a slash after an identifier as division, not a regex', () => {
@@ -175,12 +175,12 @@ describe('regex literals', () => {
 
   it('handles a character class containing a slash', () => {
     const out = tokenize('let re = /[/]/;', 'rak');
-    expect(out[0]?.some((t) => t.type === 'string' && t.value === '/[/]/')).toBe(true);
+    expect(out[0]?.some((t) => t.type === 'regex' && t.value === '/[/]/')).toBe(true);
   });
 
   it('handles an escaped slash', () => {
     const out = tokenize('let re = /a\\/b/;', 'rak');
-    expect(out[0]?.some((t) => t.type === 'string')).toBe(true);
+    expect(out[0]?.some((t) => t.type === 'regex')).toBe(true);
   });
 });
 

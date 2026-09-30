@@ -126,6 +126,10 @@ export interface ThemePalette {
 export type SyntaxPalette = Partial<{
   keyword: string;
   type: string;
+  /** Standard-library and builtin function names. */
+  builtin: string;
+  /** Literal values like `true`, `null`, `None`. */
+  constant: string;
   number: string;
   numberEmph: string;
   string: string;
@@ -133,6 +137,14 @@ export type SyntaxPalette = Partial<{
   char: string;
   comment: string;
   operator: string;
+  /** Markup tag names. */
+  tag: string;
+  /** Markup attribute names. */
+  attr: string;
+  /** Object / stylesheet property names. */
+  property: string;
+  /** CSS selectors and class names. */
+  selector: string;
   macro: string;
   macroInv: string;
   ident: string;
@@ -155,6 +167,8 @@ export interface ThemeDefinition {
 const BASE_SYNTAX: Required<SyntaxPalette> = {
   keyword: '#c084fc',
   type: '#22d3ee',
+  builtin: '#7dd3fc',
+  constant: '#fb923c',
   number: '#fdba74',
   numberEmph: '#fdba74',
   string: '#4ade80',
@@ -162,6 +176,10 @@ const BASE_SYNTAX: Required<SyntaxPalette> = {
   char: '#fbbf24',
   comment: '#6b7280',
   operator: '#f472b6',
+  tag: '#f472b6',
+  attr: '#fbbf24',
+  property: '#7dd3fc',
+  selector: '#c084fc',
   macro: '#7dd3fc',
   macroInv: '#6ee7b7',
   ident: '#e4e4e7',
@@ -534,6 +552,8 @@ export function resolveThemeVars(themeId: string, accentOverride: string | null)
     '--ag-whitespace': p.whitespace,
     '--ag-syn-keyword': syntax.keyword,
     '--ag-syn-type': syntax.type,
+    '--ag-syn-builtin': syntax.builtin,
+    '--ag-syn-constant': syntax.constant,
     '--ag-syn-number': syntax.number,
     '--ag-syn-number-emph': syntax.numberEmph,
     '--ag-syn-string': syntax.string,
@@ -541,6 +561,10 @@ export function resolveThemeVars(themeId: string, accentOverride: string | null)
     '--ag-syn-char': syntax.char,
     '--ag-syn-comment': syntax.comment,
     '--ag-syn-operator': syntax.operator,
+    '--ag-syn-tag': syntax.tag,
+    '--ag-syn-attr': syntax.attr,
+    '--ag-syn-property': syntax.property,
+    '--ag-syn-selector': syntax.selector,
     '--ag-syn-macro': syntax.macro,
     '--ag-syn-macro-inv': syntax.macroInv,
     '--ag-syn-ident': syntax.ident,

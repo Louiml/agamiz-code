@@ -8,7 +8,8 @@ import { EditorHistory } from '../features/editorHistory';
 import { indentBlock, outdentBlock } from '../features/indent';
 import { contextAt, decideAutoClose } from '../features/autoClose';
 import { lineAt, lineEndOffset, lineStartOffset, longestLine, normalizeBuffer, positionAt } from '../features/eol';
-import { RAK_KEYWORDS, RAK_TYPES } from '../../extensions/rak/language';
+import { tokenize } from '../../languages/tokenizer';
+import type { TokenType as LangTokenType } from '../../languages/types';
 
 interface CodeEditorProps {
   value: string;
@@ -67,12 +68,6 @@ interface CodeEditorProps {
   revealLine?: { line: number; token: number } | null;
 }
 
-const KEYWORDS = RAK_KEYWORDS;
-
-const KEYWORD_SET = new Set(KEYWORDS);
-
-const TYPES = RAK_TYPES;
-const TYPE_SET = new Set(TYPES);
 
 const KIND_ICON: Record<Suggestion['kind'], IconName> = {
   keyword: 'key',
@@ -94,204 +89,61 @@ const KIND_CLASS: Record<Suggestion['kind'], string> = {
   symbol: 'text-emerald-400',
 };
 
-interface Token {
-  type: 'keyword' | 'type' | 'hex' | 'number' | 'float' | 'typedint' | 'interp' | 'string' | 'comment' | 'bytes' | 'ident' | 'op' | 'ws' | 'regex' | 'char' | 'macrovar' | 'macroinv';
-  value: string;
-}
 
-function canEndExpr(t: Token | null): boolean {
-  if (!t) return false; // start of line -> regex context
-  if (['ident', 'hex', 'number', 'float', 'typedint', 'interp', 'string', 'bytes', 'regex', 'char', 'macrovar', 'macroinv'].includes(t.type)) return true;
-  if (t.type === 'op' && (t.value === ')' || t.value === ']' || t.value === '}')) return true;
-  return false;
-}
-
-function tokenizeLine(line: string): Token[] {
-  const tokens: Token[] = [];
-  let i = 0;
-  const lastSig = (): Token | null => {
-    for (let k = tokens.length - 1; k >= 0; k--) if (tokens[k].type !== 'ws') return tokens[k];
-    return null;
-  };
-
-  while (i < line.length) {
-    if (/\s/.test(line[i])) {
-      let ws = '';
-      while (i < line.length && /\s/.test(line[i])) { ws += line[i]; i++; }
-      tokens.push({ type: 'ws', value: ws });
-      continue;
-    }
-    if (line[i] === '/' && line[i + 1] === '/') {
-      tokens.push({ type: 'comment', value: line.slice(i) });
-      break;
-    }
-    if (line[i] === '/' && !canEndExpr(lastSig())) {
-      // Regex literal /pattern/flags (operand context).
-      let j = i + 1;
-      let re = '/';
-      let inClass = false;
-      while (j < line.length) {
-        const c = line[j];
-        if (c === '\\' && j + 1 < line.length) { re += c + line[j + 1]; j += 2; continue; }
-        if (c === '[') { inClass = true; re += c; j++; continue; }
-        if (c === ']') { inClass = false; re += c; j++; continue; }
-        if (c === '/' && !inClass) { re += '/'; j++; break; }
-        re += c; j++;
-      }
-      while (j < line.length && /[a-z]/i.test(line[j])) { re += line[j]; j++; }
-      tokens.push({ type: 'regex', value: re });
-      i = j;
-      continue;
-    }
-    if (line[i] === '$' && /[a-zA-Z_]/.test(line[i + 1] || '')) {
-      // Macro placeholder $name
-      let mv = '$';
-      i++;
-      while (i < line.length && /[a-zA-Z0-9_]/.test(line[i])) { mv += line[i]; i++; }
-      tokens.push({ type: 'macrovar', value: mv });
-      continue;
-    }
-    if (line[i] === "'") {
-      // Char literal 'P', '\x41', '\u{03B1}', '\n'
-      let j = i + 1;
-      let ch = "'";
-      const rest = line.slice(j);
-      const uni = rest.match(/^\\u\{[0-9A-Fa-f]{1,6}\}/);
-      if (uni) { ch += uni[0]; j += uni[0].length; }
-      else if (line[j] === '\\' && line[j + 1] === 'x' && j + 3 < line.length && /[0-9a-fA-F]{2}/.test(line.slice(j + 2, j + 4))) {
-        ch += line.slice(j, j + 4); j += 4;
-      } else if (line[j] === '\\' && j + 1 < line.length) {
-        ch += line[j] + line[j + 1]; j += 2;
-      } else if (line[j] && line[j] !== "'") {
-        ch += line[j]; j += 1;
-      }
-      if (line[j] === "'") { ch += "'"; j++; }
-      tokens.push({ type: 'char', value: ch });
-      i = j;
-      continue;
-    }
-    if ((line[i] === '0' && line[i + 1] === 'b') || (line[i] === '0' && line[i + 1] === 'B')) {
-      let bin = '0b';
-      i += 2;
-      while (i < line.length && /[01_]/.test(line[i])) { bin += line[i]; i++; }
-      tokens.push({ type: 'number', value: bin });
-      continue;
-    }
-    if ((line[i] === '0' && line[i + 1] === 'o') || (line[i] === '0' && line[i + 1] === 'O')) {
-      let oct = '0o';
-      i += 2;
-      while (i < line.length && /[0-7_]/.test(line[i])) { oct += line[i]; i++; }
-      tokens.push({ type: 'number', value: oct });
-      continue;
-    }
-    if (line[i] === '0' && (line[i + 1] === 'x' || line[i + 1] === 'X')) {
-      let hex = '0x';
-      i += 2;
-      while (i < line.length && /[0-9A-Fa-f]/.test(line[i])) { hex += line[i]; i++; }
-      tokens.push({ type: 'hex', value: hex });
-      continue;
-    }
-    if (line[i] === 'f' && line[i + 1] === '"') {
-      let str = 'f"';
-      i += 2;
-      while (i < line.length && line[i] !== '"') {
-        if (line[i] === '\\' && i + 1 < line.length) { str += line[i] + line[i + 1]; i += 2; }
-        else { str += line[i]; i++; }
-      }
-      if (i < line.length) { str += '"'; i++; }
-      tokens.push({ type: 'interp', value: str });
-      continue;
-    }
-    if (/[0-9]/.test(line[i])) {
-      let num = '';
-      while (i < line.length && /[0-9]/.test(line[i])) { num += line[i]; i++; }
-      if (line[i] === '.' && /[0-9]/.test(line[i + 1] || '')) {
-        num += '.';
-        i++;
-        while (i < line.length && /[0-9]/.test(line[i])) { num += line[i]; i++; }
-        if (line[i] === 'f' && (line[i + 1] === '3' || line[i + 1] === '6')) { num += 'f' + line[i + 1]; i += 2; }
-        tokens.push({ type: 'float', value: num });
-        continue;
-      }
-      const suf = line.slice(i).match(/^(i8|i16|i32|i64|u8|u16|u32|u64|f32|f64)/);
-      if (suf) { num += suf[0]; i += suf[0].length; tokens.push({ type: 'typedint', value: num }); continue; }
-      tokens.push({ type: 'number', value: num });
-      continue;
-    }
-    if (line[i] === 'b' && line[i + 1] === '"') {
-      let str = 'b"';
-      i += 2;
-      while (i < line.length && line[i] !== '"') {
-        if (line[i] === '\\' && i + 1 < line.length) { str += line[i] + line[i + 1]; i += 2; }
-        else { str += line[i]; i++; }
-      }
-      if (i < line.length) { str += '"'; i++; }
-      tokens.push({ type: 'bytes', value: str });
-      continue;
-    }
-    if (line[i] === '"') {
-      let str = '"';
-      i++;
-      while (i < line.length && line[i] !== '"') {
-        if (line[i] === '\\' && i + 1 < line.length) { str += line[i] + line[i + 1]; i += 2; }
-        else { str += line[i]; i++; }
-      }
-      if (i < line.length) { str += '"'; i++; }
-      tokens.push({ type: 'string', value: str });
-      continue;
-    }
-    if (/[a-zA-Z_]/.test(line[i])) {
-      let ident = '';
-      while (i < line.length && /[a-zA-Z0-9_]/.test(line[i])) { ident += line[i]; i++; }
-      // Macro invocation `name!(...)` — but not `name != ...`
-      if (line[i] === '!' && line[i + 1] !== '=') { ident += '!'; i++; tokens.push({ type: 'macroinv', value: ident }); continue; }
-      if (KEYWORD_SET.has(ident)) tokens.push({ type: 'keyword', value: ident });
-      else if (TYPE_SET.has(ident)) tokens.push({ type: 'type', value: ident });
-      else tokens.push({ type: 'ident', value: ident });
-      continue;
-    }
-    const threeChar = line.slice(i, i + 3);
-    if (['...'].includes(threeChar)) {
-      tokens.push({ type: 'op', value: threeChar }); i += 3; continue;
-    }
-    const twoChar = line.slice(i, i + 2);
-    if (['==', '!=', '<=', '>=', '<<', '>>', '&&', '||', '->', '=>', '+=', '-=', '*=', '/=', '%=', '::', '..', '|>'].includes(twoChar)) {
-      tokens.push({ type: 'op', value: twoChar }); i += 2; continue;
-    }
-    if ('+-*/%&|^!~<>=.,:;()[]{}?'.includes(line[i])) {
-      tokens.push({ type: 'op', value: line[i] }); i++; continue;
-    }
-    tokens.push({ type: 'ident', value: line[i] }); i++;
-  }
-  return tokens;
-}
-
-function getTokenStyle(type: Token['type']): React.CSSProperties {
+/**
+ * Styles for the registry tokenizer's token vocabulary.
+ *
+ * Covers the full registry vocabulary, including the markup and`r`n * literal-value kinds that Rak never produced.
+ */
+function getTokenStyle(type: LangTokenType): React.CSSProperties {
   switch (type) {
     case 'keyword': return { color: 'var(--ag-syn-keyword)', fontWeight: 600 };
     case 'type': return { color: 'var(--ag-syn-type)' };
-    case 'hex': return { color: 'var(--ag-syn-number)', fontWeight: 600 };
+    case 'builtin': return { color: 'var(--ag-syn-builtin)' };
+    case 'constant': return { color: 'var(--ag-syn-constant)' };
     case 'number':
-    case 'float':
-    case 'typedint': return { color: 'var(--ag-syn-number)' };
-    case 'interp':
-    case 'string': return { color: 'var(--ag-syn-string)' };
+    case 'float': return { color: 'var(--ag-syn-number)' };
+    case 'string':
+    case 'attr-string': return { color: 'var(--ag-syn-string)' };
     case 'regex': return { color: 'var(--ag-syn-regex)' };
     case 'char': return { color: 'var(--ag-syn-char)' };
-    case 'bytes': return { color: 'var(--ag-syn-char)' };
-    case 'macrovar': return { color: 'var(--ag-syn-macro)' };
-    case 'macroinv': return { color: 'var(--ag-syn-macro-inv)', fontWeight: 600 };
     case 'comment': return { color: 'var(--ag-syn-comment)', fontStyle: 'italic' };
     case 'op': return { color: 'var(--ag-syn-operator)' };
+    case 'tag': return { color: 'var(--ag-syn-tag)' };
+    case 'attr': return { color: 'var(--ag-syn-attr)' };
+    case 'property': return { color: 'var(--ag-syn-property)' };
+    case 'selector': return { color: 'var(--ag-syn-selector)' };
+    case 'macro': return { color: 'var(--ag-syn-macro)' };
     case 'ident': return { color: 'var(--ag-syn-ident)' };
+    // Whitespace is rendered as-is; colouring it would fight the space markers
+    // the overlay draws underneath.
+    case 'ws': return {};
     default: return { color: 'var(--ag-syn-default)' };
   }
 }
 
-function renderLine(line: string): React.ReactNode {
+/**
+ * Drop the leading and trailing whitespace tokens from a line.
+ *
+ * `renderWhitespace` peels the indentation off the front and the trailing run
+ * off the back so it can draw space markers, and then highlights only what is
+ * left. Handing `renderLine` the whole token list would colour the indentation
+ * as ordinary text underneath those markers, so the two edge runs are removed
+ * to match.
+ */
+function stripEdgeWs(tokens?: { type: LangTokenType; value: string }[]) {
+  if (!tokens) return undefined;
+  let start = 0;
+  let end = tokens.length;
+  while (start < end && tokens[start].type === 'ws') start++;
+  while (end > start && tokens[end - 1].type === 'ws') end--;
+  return tokens.slice(start, end);
+}
+
+function renderLine(line: string, tokens?: { type: LangTokenType; value: string }[]): React.ReactNode {
   if (line.length === 0) return '\u200B';
-  const tokens = tokenizeLine(line);
-  return tokens.map((token, i) => (
+  const use = tokens ?? tokenize(line, 'rak')[0] ?? [];
+  return use.map((token, i) => (
     <span key={i} style={getTokenStyle(token.type)}>{token.value}</span>
   ));
 }
@@ -721,6 +573,25 @@ export default function CodeEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealLine?.token]);
 
+  /**
+   * Whole-buffer tokenization for the highlight layer and for auto-close
+   * context.
+   *
+   * The registry tokenizer carries state across lines, which is the point: a
+   * block comment or a Python triple-quoted string spans lines, and tokenizing
+   * a single line in isolation cannot know it is still inside one. The previous
+   * per-line approach highlighted the body of every multi-line construct as
+   * ordinary code.
+   *
+   * Memoised on the text and language so this costs one pass per edit rather
+   * than one per rendered line. For very large files that is still O(file) per
+   * keystroke, which is the known rendering-performance follow-up.
+   */
+  const langTokens = useMemo(
+    () => tokenize(buffer.text, languageId),
+    [buffer.text, languageId],
+  );
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const mod = e.ctrlKey || e.metaKey;
 
@@ -782,6 +653,7 @@ export default function CodeEditor({
       }
       return;
     }
+
     // Auto-close brackets and quotes.
     //
     // The decision lives in features/autoClose.ts because the rules are the
@@ -793,9 +665,11 @@ export default function CodeEditor({
       const start = e.currentTarget.selectionStart;
       const end = e.currentTarget.selectionEnd;
       const row = lineAt(buffer, start);
-      // The highlighter is stateful per line, so tokenizing just this line is
-      // both correct and cheap — no need for the whole buffer here.
-      const lineTokens = tokenizeLine(buffer.lines[row] ?? '');
+      // Reuse the buffer's already-tokenized lines rather than re-scanning
+      // this one: the caret is inside `langTokens[row]`, and multi-line
+      // strings and comments are only tracked correctly because the pass
+      // started at the top of the file.
+      const lineTokens = langTokens[row] ?? [];
       const decision = decideAutoClose({
         key: e.key,
         text: buffer.text,
@@ -956,7 +830,7 @@ export default function CodeEditor({
    * The glyphs are `aria-hidden` content inside an already-hidden `<pre>`, so
    * the text selection and copy behaviour of the textarea is unaffected.
    */
-  const renderWhitespace = (line: string): React.ReactNode => {
+  const renderWhitespace = (line: string, lineTokens?: { type: LangTokenType; value: string }[]): React.ReactNode => {
     if (renderWhitespaceMode === 'none' || line.length === 0) return line;
     const isBlank = /^[ \t]*$/.test(line);
     if (isBlank) {
@@ -974,7 +848,7 @@ export default function CodeEditor({
     return (
       <>
         <span style={{ color: 'var(--ag-whitespace)' }}>{lead.replace(/ /g, '·').replace(/\t/g, '→')}</span>
-        {renderLine(body)}
+        {renderLine(body, stripEdgeWs(lineTokens))}
         {trailMatch && (
           <span style={{ color: 'var(--ag-whitespace)' }}>
             {trailMatch[0].replace(/ /g, '·').replace(/\t/g, '→')}
@@ -985,6 +859,7 @@ export default function CodeEditor({
   };
 
   // Build highlighted content with search match highlights
+
   const renderHighlighted = () => {
     return lines.map((line, i) => (
       <div
@@ -997,7 +872,7 @@ export default function CodeEditor({
           background: activeLineHighlight && i === cursorLine - 1 ? 'var(--ag-active-line)' : undefined,
         }}
       >
-        {renderWhitespace(line)}
+        {renderWhitespace(line, langTokens[i])}
       </div>
     ));
   };
