@@ -120,8 +120,25 @@ export interface LanguageDef {
   lineComments: string[];
   /** Block comment pairs, e.g. ["/*", "*\\/"] */
   blockComments: [string, string][];
-  /** String delimiters (single-char), incl. prefixed ones handled via delimiters below. */
-  strings: { open: string; close?: string; template?: boolean; prefix?: string }[];
+  /**
+   * String delimiters.
+   *
+   * `multiline` marks a delimiter that legitimately continues past end-of-line —
+   * a template literal, a raw string. Only those may carry their unterminated
+   * state into the next line. This is per-delimiter rather than per-language
+   * because Python has both: `"""` spans lines, but a lone `"` that fails to
+   * close is a typo, and treating it as multiline turned every following line
+   * into a string.
+   *
+   * `template` implies `multiline`; it is the existing "has interpolation" flag.
+   */
+  strings: {
+    open: string;
+    close?: string;
+    template?: boolean;
+    prefix?: string;
+    multiline?: boolean;
+  }[];
   /** Character literal delimiter, e.g. "'", or null if unsupported. */
   charQuote?: string;
   keywords: string[];
@@ -136,8 +153,17 @@ export interface LanguageDef {
   numberSuffixes?: string[];
   /** regex literal enabled (operand context), e.g. Rak, JavaScript */
   regexLiteral?: boolean;
-  /** triple-quoted long strings, e.g. Lua [[...]] / """...""" */
-  tripleQuotes?: string[];
+  /**
+   * Multi-line string delimiters, as explicit open/close pairs.
+   *
+   * This is a pair rather than a single delimiter because the previous shape,
+   * `string[]`, forced the tokenizer to use the same text to open and close. A
+   * bare `]]` in Lua — from `x = a[b[1]]` — was therefore matched as an *opening*
+   * `]]`, which then never closed, so the rest of the file rendered as a string.
+   * Asymmetric delimiters (`[[` … `]]`, `"""` … `"""`) are the whole point, so
+   * the type has to be able to express them.
+   */
+  tripleQuotes?: { open: string; close: string }[];
   /** treat `$name` as a macro / interpolation var */
   macroVar?: boolean;
   /** object-like `key:` highlighting for indentation languages */

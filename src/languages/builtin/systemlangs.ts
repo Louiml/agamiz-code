@@ -10,7 +10,12 @@ export const rustDef: LanguageDef = {
   strings: [
     { open: '"', template: false },
     { open: 'b"', template: false },
-    { open: 'r#"', template: false },
+    // Raw strings. `close` is mandatory here: with no `close`, the tokenizer
+    // used the *opener* as the terminator and searched for another `r#"`, so
+    // every raw string ran to end-of-line and turned the rest of the file into
+    // a string. `r##"` needs a hash count to match, which a static table cannot
+    // express, so only the single-hash form is covered.
+    { open: 'r#"', close: '"#', template: false },
   ],
   charQuote: "'",
   keywords: [

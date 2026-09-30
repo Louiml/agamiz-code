@@ -147,12 +147,13 @@ function scanLine(line: string, lang: LanguageDef, L: Lookups, state: CarryState
 
     let consumed = false;
 
-    // line comments
-    for (const m of lang.lineComments) {
-      if (rest.startsWith(m)) { out.push({ type: 'comment', value: rest }); return; }
-    }
-
-    // block comments
+    // Block comments are tried BEFORE line comments.
+    //
+    // The order matters whenever a line-comment marker prefixes a block-comment
+    // opener, which is common: HTML registers `<!--` in both lists, and Lua's
+    // `--` matches the `--[[` long-comment opener. With line comments first, the
+    // block rule was unreachable, so a multi-line comment's body after the first
+    // line was highlighted as code.
     for (const [open, close] of lang.blockComments) {
       if (rest.startsWith(open)) {
         const j = line.indexOf(close, i + open.length);
@@ -165,11 +166,16 @@ function scanLine(line: string, lang: LanguageDef, L: Lookups, state: CarryState
     }
     if (consumed) continue;
 
+    // line comments
+    for (const m of lang.lineComments) {
+      if (rest.startsWith(m)) { out.push({ type: 'comment', value: rest }); return; }
+    }
+
     // triple quoted strings
     for (const tq of lang.tripleQuotes ?? []) {
-      if (rest.startsWith(tq)) {
-        const r = scanQuoted(line, i, tq, tq, out);
-        state.stringClose = r.closed ? null : tq;
+      if (rest.startsWith(tq.open)) {
+        const r = scanQuoted(line, i, tq.open, tq.close, out);
+        state.stringClose = r.closed ? null : tq.close;
         i = r.end;
         consumed = true;
         break;
@@ -235,7 +241,13 @@ function scanLine(line: string, lang: LanguageDef, L: Lookups, state: CarryState
       const close = s.close ?? s.open;
       if (rest.startsWith(s.open)) {
         const r = scanQuoted(line, i, s.open, close, out);
-        state.stringClose = r.closed ? null : close;
+        // An unterminated string only carries onto the next line when the
+        // delimiter is one that legitimately spans lines — a template literal
+        // or a raw string. Otherwise a single stray `"` in Go, C, Rust, Java,
+        // C# or JavaScript re-highlighted every following line as a string, and
+        // an apostrophe typed inside a `//` comment did the same.
+        const carries = s.multiline === true || s.template === true;
+        state.stringClose = r.closed || !carries ? null : close;
         i = r.end;
         strHit = true;
         break;
@@ -306,7 +318,10 @@ function scanLine(line: string, lang: LanguageDef, L: Lookups, state: CarryState
 export function tokenize(text: string, langId: string | undefined): Token[][] {
   const lang = getLanguage(langId) ?? getLanguage('plaintext')!;
   const L = makeLookups(lang);
-  const lines: Token[][] = text === '' ? [[]] : [];
+  // Starts empty: the loop below pushes one entry per line, so seeding `[[]]`
+  // for an empty document produced *two* entries for a one-line file, breaking
+  // the "one entry per logical line" contract above.
+  const lines: Token[][] = [];
   const state: CarryState = { blockClose: null, stringClose: null };
 
   const parts = text.split('\n');

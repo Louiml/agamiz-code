@@ -29,7 +29,11 @@ export const pythonDef: LanguageDef = {
   hexPrefixes: ['0x', '0X'],
   binaryPrefixes: ['0b', '0B'],
   octalPrefixes: ['0o', '0O'],
-  tripleQuotes: ['"""', "'''"],
+  // Symmetric open/close, so a bare `'` in a docstring cannot open a string
+  // that never closes.
+  tripleQuotes: [{ open: '"""', close: '"""' }, { open: "'''", close: "'''" }],
+  // Single-quoted strings deliberately do not carry across lines; only the
+  // triple-quote rules above do.
   propertyColon: false,
   completion: PYTHON_COMPLETION,
 };
@@ -58,7 +62,11 @@ export const luaDef: LanguageDef = {
   types: [],
   constants: ['true', 'false', 'nil', 'self'],
   hexPrefixes: ['0x', '0X'],
-  tripleQuotes: ['[==[', ']]'],
+  // Asymmetric delimiters. This is exactly the case the old `string[]` shape
+  // could not express: with `[==[` used as both open and close, a bare `]]`
+  // from `x = a[b[1]]` opened a string that never terminated and swallowed the
+  // rest of the file.
+  tripleQuotes: [{ open: '[==[', close: ']==]' }],
   macroVar: false,
   completion: LUA_COMPLETION,
 };

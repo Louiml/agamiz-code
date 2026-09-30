@@ -24,7 +24,17 @@ const JS_STRINGS = [
   { open: "'", template: false },
   { open: '`', template: true },
 ];
-const JS_TRIPLE = ['"""', "'''"];
+// Symmetric open/close pairs, built with `repeat` rather than written as
+// literals so the delimiters cannot be misread or miscounted. The old
+// `string[]` shape forced one text to serve as both the open and the close,
+// which is what let a bare quote anywhere open a string that never terminated
+// and swallow the rest of the file.
+const DQ3 = '"'.repeat(3);
+const SQ3 = "'".repeat(3);
+const JS_TRIPLE = [
+  { open: DQ3, close: DQ3 },
+  { open: SQ3, close: SQ3 },
+];
 
 export const jsDefs: LanguageDef[] = [
   {
