@@ -537,6 +537,44 @@ describe('undo/redo buttons', () => {
   });
 });
 
+describe('accepting a completion', () => {
+  const firstRow = () => screen.getByRole('listbox').querySelector('[role=option]') as HTMLElement | null;
+
+  // The popup is recomputed on keyup, not on change, and assigning `value`
+  // parks the caret at the end of the buffer. Both have to be reproduced here
+  // or the suggestion is ranked against a different prefix than the one the
+  // accept then replaces.
+  const type = (ta: HTMLTextAreaElement, value: string, caret: number) => {
+    fireEvent.change(ta, { target: { value, selectionStart: caret } });
+    fireEvent.keyUp(ta, { key: value.slice(-1) || 'x' });
+  };
+
+  it('replaces only the word under the caret', () => {
+    const { ta } = setupControlled('x = print()', { languageId: 'python' });
+    type(ta, 'x = pri()', 7);
+    const row = firstRow();
+    expect(row?.textContent ?? '').toContain('print');
+    fireEvent.click(row!);
+    // A wrong span leaves debris: 'x = priprint()' or 'x = pri()print'.
+    expect(ta.value).toBe('x = print()');
+  });
+
+  it('replaces a hyphenated CSS property as one unit', () => {
+    // The span replaced on accept has to be the span that was ranked against.
+    // These were two different things: the engine ranked `text-ali` while the
+    // editor computed `ali` from its own hand-rolled pattern, so accepting a
+    // property spliced text into the middle of the word.
+    const { ta } = setupControlled('.a { text-al }', { languageId: 'css' });
+    type(ta, '.a { text-ali }', '.a { text-ali'.length);
+    const row = firstRow();
+    expect(row?.textContent ?? '').toContain('text-align');
+    fireEvent.click(row!);
+    // The property word inserts `text-align: `, so the trailing space from the
+    // original value follows it.
+    expect(ta.value).toBe('.a { text-align:  }');
+  });
+});
+
 describe('gutter', () => {
   it('numbers every line', () => {
     const { container } = setup('one\ntwo\nthree');

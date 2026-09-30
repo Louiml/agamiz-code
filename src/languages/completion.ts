@@ -42,7 +42,29 @@ export interface CompletionRequest {
 
 /** An identifier as the editor understands one. */
 const IDENT = '[A-Za-z_][A-Za-z0-9_]*';
-const RE_WORD_AT_END = new RegExp(`${IDENT}$`);
+
+const wordCache = new Map<string, RegExp>();
+
+/**
+ * The pattern for "the word under the caret" in a language.
+ *
+ * Defaults to a plain identifier. A language that disagrees — CSS, where
+ * `text-align` and `--brand` are single words — supplies `wordPattern`.
+ *
+ * This is deliberately *not* shared with the tokenizer: the tokenizer decides
+ * how to colour a line, this decides what a completion replaces, and CSS
+ * property names are one word for the second purpose and several tokens for the
+ * first.
+ */
+function wordRegex(languageId: string | undefined): RegExp {
+  const id = key(languageId);
+  const cached = wordCache.get(id);
+  if (cached) return cached;
+  const source = config(languageId)?.wordPattern ?? IDENT;
+  const compiled = new RegExp(`(?:${source})$`);
+  wordCache.set(id, compiled);
+  return compiled;
+}
 
 const poolCache = new Map<string, Suggestion[]>();
 const declCache = new Map<string, RegExp[]>();
@@ -178,9 +200,9 @@ export function getPrediction(
   const conf = config(languageId);
   if (!conf) return null;
   // Only predict directly after `keyword ` — mid-word the prefix path applies.
-  if (RE_WORD_AT_END.test(before)) return null;
+  if (wordAt(before, before.length, languageId)) return null;
 
-  const word = before.trimEnd().match(RE_WORD_AT_END)?.[0]?.toLowerCase();
+  const word = before.trimEnd().match(wordRegex(languageId))?.[0]?.toLowerCase();
   if (!word) return null;
 
   const pick = (table: Record<string, BlockSnippet> | undefined): Suggestion | null => {
@@ -193,8 +215,8 @@ export function getPrediction(
 }
 
 /** The identifier under the caret, i.e. the text a completion would replace. */
-export function wordAt(source: string, offset: number): string {
-  return source.slice(0, offset).match(RE_WORD_AT_END)?.[0] ?? '';
+export function wordAt(source: string, offset: number, languageId?: string): string {
+  return source.slice(0, offset).match(wordRegex(languageId))?.[0] ?? '';
 }
 
 /**
@@ -210,15 +232,26 @@ function camelAbbreviation(label: string): string {
   return out;
 }
 
-/** Drops later duplicates of a label so one row per insertable text. */
+/**
+ * Drops later duplicates of a label so one row per insertable text.
+ *
+ * When a label appears twice — `def` is both a Python keyword and a snippet —
+ * the one that carries a `body` wins, because it is the one that actually puts
+ * something other than the bare word into the buffer. The keyword-only entry
+ * would insert `def` and leave the user to type the signature.
+ */
 function dedupeByLabel(list: Suggestion[]): Suggestion[] {
-  const seen = new Set<string>();
+  const index = new Map<string, number>();
   const out: Suggestion[] = [];
   for (const s of list) {
     const id = s.label.toLowerCase();
-    if (seen.has(id)) continue;
-    seen.add(id);
-    out.push(s);
+    const at = index.get(id);
+    if (at === undefined) {
+      index.set(id, out.length);
+      out.push(s);
+    } else if (!out[at].body && s.body) {
+      out[at] = s;
+    }
   }
   return out;
 }
@@ -227,6 +260,11 @@ function dedupeByLabel(list: Suggestion[]): Suggestion[] {
  * Rank the pool against a typed prefix: exact, then prefix, then camelCase
  * abbreviation, then substring. The tiers keep `for` above `before` and
  * `getUser` above `getUsername`.
+ *
+ * Within a tier, a snippet sorts after everything else. Snippets are added to
+ * the pool first, so without this they took the top slots on match quality
+ * alone — typing `color: re` offered the `reset` snippet above the `revert` and
+ * `red` values the user was looking for.
  */
 function rank(pool: Suggestion[], prefix: string): Suggestion[] {
   const exact: Suggestion[] = [];
@@ -238,9 +276,22 @@ function rank(pool: Suggestion[], prefix: string): Suggestion[] {
     if (label === prefix) exact.push(s);
     else if (label.startsWith(prefix)) starts.push(s);
     else if (camelAbbreviation(s.label).startsWith(prefix)) camel.push(s);
-    else if (label.includes(prefix)) contains.push(s);
+    // Substring matching on a one- or two-letter prefix is almost pure noise:
+    // `cl` matched `article`, and `bo` matched `viewBox`. Real editors only
+    // fall back to a substring once the prefix is long enough to be a choice
+    // rather than a coincidence.
+    else if (prefix.length >= 3 && label.includes(prefix)) contains.push(s);
   }
-  return dedupeByLabel([...exact, ...starts, ...camel, ...contains]);
+  const demoteSnippets = (xs: Suggestion[]) => [
+    ...xs.filter((s) => s.kind !== 'snippet'),
+    ...xs.filter((s) => s.kind === 'snippet'),
+  ];
+  return dedupeByLabel([
+    ...demoteSnippets(exact),
+    ...demoteSnippets(starts),
+    ...demoteSnippets(camel),
+    ...demoteSnippets(contains),
+  ]);
 }
 
 /**
@@ -251,7 +302,9 @@ function rank(pool: Suggestion[], prefix: string): Suggestion[] {
 function triggerAt(languageId: string | undefined, before: string): CompletionTrigger | null {
   const triggers = config(languageId)?.triggers ?? [];
   for (const t of triggers) {
-    if (before.endsWith(t.text)) return t;
+    if (!before.endsWith(t.text)) continue;
+    if (t.guard && !new RegExp(t.guard).test(before)) continue;
+    return t;
   }
   return null;
 }
@@ -268,7 +321,7 @@ export function getSuggestions(req: CompletionRequest): Suggestion[] {
   if (!languageId || !getLanguage(languageId)) return [];
 
   const before = source.slice(0, Math.max(0, Math.min(offset, source.length)));
-  const prefix = wordAt(source, before.length).toLowerCase();
+  const prefix = wordAt(source, before.length, languageId).toLowerCase();
   const limit = req.limit ?? (force ? 16 : 8);
   const prediction = getPrediction(languageId, before);
 
@@ -279,17 +332,97 @@ export function getSuggestions(req: CompletionRequest): Suggestion[] {
     return matches;
   }
 
-  if (force) return dedupeByLabel(candidatePool(languageId, source, prediction)).slice(0, limit);
-
+  // A trigger outranks `force`. Ctrl+Space inside a tag or after a property
+  // colon is asking "what goes here", and answering with the first sixteen
+  // entries of the pool — nearly all of them snippets — was the old behaviour
+  // regardless of where the caret was.
   const trigger = triggerAt(languageId, before);
+
   if (trigger) {
     const kinds = trigger.kinds;
-    return getCompletionPool(languageId)
-      .filter((s) => (kinds ? kinds.includes(s.kind) : s.kind !== 'snippet'))
-      .slice(0, limit);
+    const pool = getCompletionPool(languageId)
+      .filter((s) => (kinds ? kinds.includes(s.kind) : s.kind !== 'snippet'));
+    // A property-aware list first, so `color: ` leads with colours rather than
+    // with the display keywords that also happen to be values.
+    const specific = propertySpecificValues(languageId, before);
+    const fromBuffer = contextSymbols(languageId, source, before);
+    return dedupeByLabel([...specific, ...fromBuffer, ...pool]).slice(0, limit);
+  }
+
+  if (force) {
+    return interleave(candidatePool(languageId, source, prediction), limit);
   }
 
   return prediction ? [prediction] : [];
+}
+
+/**
+ * Alternate between two groups so neither can crowd the other out.
+ *
+ * Used for explicit "show me everything" requests. Simply demoting snippets
+ * replaced one failure with another: Python has enough keywords to fill the
+ * whole limit on their own, so every snippet was pushed off the end. A user
+ * pressing Ctrl+Space wants a spread, not sixteen near-identical rows.
+ */
+function interleave(pool: Suggestion[], limit: number): Suggestion[] {
+  const items = dedupeByLabel(pool);
+  const snippets = items.filter((s) => s.kind === 'snippet');
+  const rest = items.filter((s) => s.kind !== 'snippet');
+  const out: Suggestion[] = [];
+  let a = 0;
+  let b = 0;
+  while (out.length < limit && (a < rest.length || b < snippets.length)) {
+    if (a < rest.length) out.push(rest[a++]);
+    if (out.length < limit && b < snippets.length) out.push(snippets[b++]);
+  }
+  return out;
+}
+
+/**
+ * The values declared for the property the caret is currently inside.
+ *
+ * Matches `name:` immediately before the caret, so `.a { color: ` resolves
+ * against `color` and `.a { grid-template-columns: ` against that longer name.
+ * Returns nothing when the language has no such table or the property is not
+ * in it, and the generic value list is used instead.
+ */
+function propertySpecificValues(
+  languageId: string | undefined,
+  before: string,
+): Suggestion[] {
+  const table = config(languageId)?.propertyValues;
+  if (!table) return [];
+  const prop = before.match(/([A-Za-z_-][\w-]*)\s*:\s*$/)?.[1]?.toLowerCase();
+  if (!prop) return [];
+  const words = table[prop];
+  if (!words) return [];
+  return words.map((w) => ({ label: w.label, kind: w.kind, body: w.body, detail: w.detail }));
+}
+
+/**
+ * Buffer symbols that make sense for the trigger the caret just hit.
+ *
+ * After `.` in CSS the useful answers are the class names this stylesheet
+ * already defines, not its properties; the declaration patterns find them, and
+ * this filters the harvest down to the ones the trigger is asking about.
+ */
+function contextSymbols(
+  languageId: string | undefined,
+  source: string,
+  before: string,
+): Suggestion[] {
+  const trigger = triggerAt(languageId, before);
+  if (!trigger?.symbolPattern) return [];
+  const re = new RegExp(trigger.symbolPattern, 'g');
+  const out: Suggestion[] = [];
+  const seen = new Set<string>();
+  for (const m of source.matchAll(re)) {
+    const name = m[1] ?? m[0];
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push({ label: name, kind: 'symbol', detail: 'in this file' });
+  }
+  return out;
 }
 
 /**
@@ -312,4 +445,5 @@ function candidatePool(
 export function invalidateCompletionCache(): void {
   poolCache.clear();
   declCache.clear();
+  wordCache.clear();
 }

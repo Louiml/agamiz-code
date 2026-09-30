@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import EditorContextMenu from './EditorContextMenu';
 import { Icon, IconName } from './Icon';
-import { getSuggestions, Suggestion } from '../../languages/completion';
+import { getSuggestions, wordAt, Suggestion } from '../../languages/completion';
 import { EditorHistory } from '../features/editorHistory';
 import { indentBlock, outdentBlock } from '../features/indent';
 import { contextAt, decideAutoClose } from '../features/autoClose';
@@ -460,11 +460,11 @@ export default function CodeEditor({
     if (!textareaRef.current) return;
     const ta = textareaRef.current;
     const pos = ta.selectionStart;
-    const before = buffer.text.substring(0, pos);
-    const wordMatch = before.match(/[a-zA-Z_][a-zA-Z0-9_]*$/);
+
+    const wordMatch = wordAt(buffer.text, pos, languageId);
     const matches = getSuggestions({ languageId, source: buffer.text, offset: pos, force });
 
-    if (matches.length > 0 && (matches.length > 1 || !wordMatch || matches[0].label !== wordMatch[0])) {
+    if (matches.length > 0 && (matches.length > 1 || !wordMatch || matches[0].label !== wordMatch)) {
       setSuggestions(matches);
       setSuggestionIndex(0);
       setShowSuggestions(true);
@@ -488,9 +488,9 @@ export default function CodeEditor({
     const pos = ta.selectionStart;
     const before = buffer.text.substring(0, pos);
     const after = buffer.text.substring(pos);
-    const wordMatch = before.match(/[a-zA-Z_][a-zA-Z0-9_]*$/);
+    const wordMatch = wordAt(buffer.text, pos, languageId);
     // Predictions / forced inserts replace nothing when there is no word prefix.
-    const newBefore = wordMatch ? before.substring(0, before.length - wordMatch[0].length) : before;
+    const newBefore = wordMatch ? before.substring(0, before.length - wordMatch.length) : before;
     const inserted = suggestion.body ?? suggestion.label;
     const newValue = newBefore + inserted + after;
     // Anchor at the start of the replaced word so a completion is its own undo

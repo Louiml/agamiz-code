@@ -149,7 +149,17 @@ console.log('\n6b. a trigger opens the list where there is no word');
   check('html < list is capped by limit', labels('<', 'html').length <= 8);
   check('closing tag trigger', labels('</', 'html').includes('div'), labels('</', 'html').join(','));
   // `color: ` has no word either, but CSS wants the value list.
-  check('css after a colon offers values', labels('color: ', 'css').includes('flex'), labels('color: ', 'css').join(','));
+  // The intent is that a colon opens the value list. Which values is the
+  // sharper question: this used to assert lex, a display keyword, for
+  // color: - the property-agnostic list. Values are now property-aware, so
+  // color:  leads with colours and display:  with display keywords.
+  const colorVals = labels('color: ', 'css');
+  check('css after a colon offers values', colorVals.length > 0, colorVals.join(','));
+  check('css color: offers colours, not display keywords',
+    colorVals.includes('red') && !colorVals.slice(0, 8).includes('flex'), colorVals.join(','));
+  const displayVals = labels('display: ', 'css');
+  check('css display: offers display keywords',
+    displayVals.includes('flex') && displayVals.includes('block'), displayVals.join(','));
   check('languages without triggers stay quiet', labels('( ', 'python').length === 0);
 }
 
@@ -172,7 +182,19 @@ console.log('\n8. forced completion offers the whole pool');
   const all = getSuggestions({ languageId: 'python', source: '', offset: 0, force: true });
   check('force returns rows', all.length > 10, String(all.length));
   check('force is capped', all.length <= 16, String(all.length));
-  check('snippets come first', all[0].kind === 'snippet', `${all[0].kind}:${all[0].label}`);
+  // Ctrl+Space used to lead with snippets, filling the popup with
+  // abbreviations before a single keyword was visible. Vocabulary now comes
+  // first, interleaved with the snippets so neither group can crowd the
+  // other out - simply demoting snippets just pushed every one of them past
+  // the limit, because Python has enough keywords to fill it alone.
+  check(
+    'vocabulary precedes snippets on force',
+    all[0].kind !== 'snippet',
+    `${all[0].kind}:${all[0].label}`,
+  );
+  const kinds = all.map((s) => s.kind);
+  check('snippets are still offered', kinds.includes('snippet'), kinds.join(','));
+  check('vocabulary is still offered', kinds.some((k) => k !== 'snippet'), kinds.join(','));
 
   const quiet = getSuggestions({ languageId: 'python', source: '', offset: 0 });
   check('no force and no prefix shows nothing', quiet.length === 0);

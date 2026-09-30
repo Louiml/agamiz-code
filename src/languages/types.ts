@@ -89,6 +89,24 @@ export interface CompletionTrigger {
   text: string;
   /** Restrict the list to these kinds; defaults to everything but snippets. */
   kinds?: CompletionKind[];
+  /**
+   * Harvest pattern for buffer symbols the trigger should lead with.
+   *
+   * After `.` in CSS the useful answers are the class names the stylesheet
+   * already defines; after `<div ` they are the ids and classes used elsewhere
+   * in the document. Capture group 1 is the name, and the whole match is used
+   * when there is no group.
+   */
+  symbolPattern?: string;
+  /**
+   * Regex source that the text before the caret must also match.
+   *
+   * `text` alone is too blunt a test for markup: a space appears in body prose
+   * just as much as inside a tag, so a `' '` trigger for HTML attributes would
+   * open the attribute list in the middle of a sentence. The guard narrows it
+   * to "inside an unclosed tag". Tested against the text before the caret.
+   */
+  guard?: string;
 }
 
 /**
@@ -109,6 +127,27 @@ export interface LanguageCompletion {
   blocks?: Record<string, BlockSnippet>;
   /** Keyword -> the binding tail to offer (`let` -> `= value`). */
   bindings?: Record<string, BlockSnippet>;
+  /**
+   * Regex source for "the word under the caret" — the span a completion
+   * replaces, and the prefix it is ranked against. Defaults to a plain
+   * identifier.
+   *
+   * CSS needs its own. Its property names are hyphenated (`text-align`) and its
+   * custom properties start with `--`; neither matches an identifier pattern,
+   * so the default reduced `text-ali` to the prefix `ali` and matched nothing.
+   * Every hyphenated CSS property was therefore uncompletable.
+   */
+  wordPattern?: string;
+  /**
+   * Values worth offering after a specific property, keyed by property name.
+   *
+   * A single flat value list is wrong often enough to be annoying: `color: `
+   * offered `block`, `inline` and `flex`, and `display: ` offered `red`. These
+   * take precedence over the generic list when the caret follows
+   * `this-property: `, and the generic list is still offered afterwards so an
+   * unusual value is reachable.
+   */
+  propertyValues?: Record<string, CompletionWord[]>;
 }
 
 /** A keyword run (multi-word phrases like `end if` in Lua or `is not` in Python). */

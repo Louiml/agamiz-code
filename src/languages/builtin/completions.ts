@@ -244,16 +244,25 @@ const HTML_ATTR_WORDS = HTML_ATTRIBUTES.map((label) => ({
 export const HTML_COMPLETION: LanguageCompletion = {
   snippets: HTML_SNIPPETS,
   declarations: [
-    { kind: 'symbol', pattern: String.raw`\bid\s*=\s*["']([^"']+)["']` },
-    { kind: 'symbol', pattern: String.raw`\bclass\s*=\s*["']([^"']+)["']` },
-    { kind: 'symbol', pattern: String.raw`\bfor\s*=\s*["']([^"']+)["']` },
-    { kind: 'symbol', pattern: String.raw`\bname\s*=\s*["']([^"']+)["']` },
+    // The closing quote is deliberately optional. Requiring it meant an
+    // attribute value could only be harvested once its tag was finished, so the
+    // names most worth completing - the ones inside `class="..."` - were exactly
+    // the ones unavailable while the user was typing them.
+    { kind: 'symbol', pattern: String.raw`\bid\s*=\s*["']([^"']*)` },
+    { kind: 'symbol', pattern: String.raw`\bclass\s*=\s*["']([^"']*)` },
+    { kind: 'symbol', pattern: String.raw`\bfor\s*=\s*["']([^"']*)` },
+    { kind: 'symbol', pattern: String.raw`\bname\s*=\s*["']([^"']*)` },
   ],
   // After `<` (or `</`) there is no word to match, so the tag list is opened
   // by the trigger instead.
   triggers: [
     { text: '</', kinds: ['keyword'] },
     { text: '<', kinds: ['keyword'] },
+    // Inside an open tag, after a space: the attribute list, led by the ids and
+    // classes this document already uses. Without this trigger a bare `<div `
+    // had no word to prefix-match and no trigger to open, so attribute
+    // completion only ever appeared once the user had already typed a letter.
+    { text: ' ', kinds: ['builtin'], guard: String.raw`<[A-Za-z][^<>]*$`, symbolPattern: String.raw`\b(?:id|class)\s*=\s*["']([^"']+)["']` },
   ],
   words: HTML_ATTR_WORDS,
 };
@@ -271,6 +280,32 @@ const CSS_PROPERTY_WORDS = [
   'text-transform', 'vertical-align', 'float', 'clear', 'list-style', 'content',
   'visibility', 'filter', 'mix-blend-mode', 'user-select', 'outline', 'object-fit',
   'aspect-ratio', 'inset', 'gap', 'order', 'flex-basis', 'place-items', 'aspect-ratio',
+  // The sub-properties of the four-sided shorthands. `margin` alone was in the
+  // list but `margin-top` was not, so typing `margin-` matched nothing at all.
+  'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'margin-block',
+  'margin-block-start', 'margin-block-end', 'margin-inline', 'margin-inline-start',
+  'margin-inline-end',
+  'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'padding-block',
+  'padding-block-start', 'padding-block-end', 'padding-inline', 'padding-inline-start',
+  'padding-inline-end',
+  'border-top', 'border-right', 'border-bottom', 'border-left', 'border-width',
+  'border-style', 'border-color', 'border-top-width', 'border-right-width',
+  'border-bottom-width', 'border-left-width', 'border-top-color', 'border-right-color',
+  'border-bottom-color', 'border-left-color', 'border-top-style', 'border-right-style',
+  'border-bottom-style', 'border-left-style',
+  'font-size', 'font-family', 'font-variant', 'font-stretch',
+  'inset-top', 'inset-right', 'inset-bottom', 'inset-left',
+  'grid-area', 'grid-column', 'grid-row', 'grid-auto-flow', 'grid-auto-rows',
+  'grid-auto-columns', 'place-content', 'place-self',
+  'outline-width', 'outline-style', 'outline-color', 'outline-offset',
+  'text-overflow', 'text-shadow', 'text-indent', 'text-justify',
+  'background-repeat', 'background-position', 'background-attachment', 'background-size',
+  'flex-direction', 'align-content', 'align-items', 'align-self', 'justify-content',
+  'justify-items', 'justify-self', 'flex-flow', 'flex-basis',
+  'transition-property', 'transition-duration', 'transition-timing-function',
+  'animation-name', 'animation-duration', 'animation-timing-function',
+  'white-space', 'line-height', 'letter-spacing', 'word-spacing', 'word-break',
+  'overflow-wrap', 'list-style', 'list-style-position', 'text-transform',
 ].map((label) => ({
   label,
   kind: 'builtin' as const,
@@ -309,6 +344,52 @@ const CSS_VALUE_WORDS = CSS_VALUES.map((label) => ({
   detail: 'value',
 }));
 
+const v = (label: string) => ({ label, kind: 'constant' as const, detail: 'value' });
+
+const COLOR_KEYWORDS = [
+  'black', 'silver', 'gray', 'white', 'maroon', 'red', 'purple', 'fuchsia', 'green',
+  'lime', 'olive', 'yellow', 'navy', 'blue', 'teal', 'aqua', 'orange', 'currentColor',
+  'transparent',
+];
+
+/**
+ * Values for the properties where the generic list is actively misleading.
+ *
+ * Without this, `color: ` offered `block` and `display: ` offered `red`, because
+ * both drew on one flat pool. Keys are matched lowercase against the property
+ * immediately before the caret.
+ */
+const CSS_PROPERTY_VALUES: Record<string, { label: string; kind: 'constant'; detail: string }[]> = {
+  color: COLOR_KEYWORDS.map(v),
+  'background-color': COLOR_KEYWORDS.map(v),
+  'border-color': COLOR_KEYWORDS.map(v),
+  outline: [...COLOR_KEYWORDS.map(v), v('none'), v('dashed'), v('dotted'), v('solid')],
+  display: ['block', 'inline', 'inline-block', 'flex', 'inline-flex', 'grid', 'inline-grid',
+    'contents', 'flow-root', 'none', 'table', 'table-row', 'list-item'].map(v),
+  position: ['static', 'relative', 'absolute', 'fixed', 'sticky'].map(v),
+  'flex-direction': ['row', 'row-reverse', 'column', 'column-reverse'].map(v),
+  'justify-content': ['flex-start', 'flex-end', 'center', 'space-between', 'space-around',
+    'space-evenly', 'start', 'end', 'left', 'right', 'stretch'].map(v),
+  'align-items': ['flex-start', 'flex-end', 'center', 'baseline', 'stretch', 'start',
+    'end', 'normal'].map(v),
+  overflow: ['visible', 'hidden', 'clip', 'scroll', 'auto'].map(v),
+  visibility: ['visible', 'hidden', 'collapse'].map(v),
+  'text-align': ['left', 'right', 'center', 'justify', 'start', 'end', 'match-parent'].map(v),
+  'font-weight': ['100', '200', '300', '400', '500', '600', '700', '800', '900',
+    'normal', 'bold', 'bolder', 'lighter'].map(v),
+  'font-style': ['normal', 'italic', 'oblique'].map(v),
+  'white-space': ['normal', 'nowrap', 'pre', 'pre-wrap', 'pre-line', 'break-spaces'].map(v),
+  'box-sizing': ['content-box', 'border-box'].map(v),
+  cursor: ['auto', 'default', 'pointer', 'grab', 'grabbing', 'move', 'text', 'wait',
+    'not-allowed', 'crosshair', 'help', 'zoom-in', 'zoom-out'].map(v),
+  'list-style-type': ['none', 'disc', 'circle', 'square', 'decimal', 'lower-alpha',
+    'upper-alpha', 'lower-roman', 'upper-roman'].map(v),
+  'mix-blend-mode': ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten',
+    'color-dodge', 'color-burn', 'difference', 'exclusion'].map(v),
+  'object-fit': ['fill', 'contain', 'cover', 'none', 'scale-down'].map(v),
+  'aspect-ratio': ['auto', '1 / 1', '16 / 9', '4 / 3'].map(v),
+};
+
 export const CSS_COMPLETION: LanguageCompletion = {
   snippets: CSS_SNIPPETS,
   declarations: [
@@ -316,6 +397,11 @@ export const CSS_COMPLETION: LanguageCompletion = {
     { kind: 'symbol', pattern: String.raw`\.(-?[A-Za-z_][\w-]*)` },
     { kind: 'symbol', pattern: String.raw`#(-?[A-Za-z_][\w-]*)` },
   ],
+  // A CSS property name is one word even though it is hyphenated, and a custom
+  // property starts with `--`. The default identifier pattern turned `text-ali`
+  // into the prefix `ali`, which matched nothing — no hyphenated property was
+  // completable at all.
+  wordPattern: String.raw`(?:-+|@)?[A-Za-z_][A-Za-z0-9_-]*`,
   words: [
     ...CSS_PROPERTY_WORDS,
     ...CSS_VALUE_WORDS,
@@ -323,7 +409,15 @@ export const CSS_COMPLETION: LanguageCompletion = {
   ],
   // A declaration ends with `prop: `, which is not a word — the trigger is what
   // offers the value list there.
-  triggers: [{ text: ': ', kinds: ['constant'] }],
+  triggers: [
+    { text: ': ', kinds: ['constant'] },
+    // Inside a selector, the answers are the names this stylesheet already uses.
+    // The guard keeps them out of a declaration body, where a `.` is a decimal
+    // point and a `#` is a colour.
+    { text: '.', kinds: [], guard: String.raw`[^{}]*$`, symbolPattern: String.raw`\.(-?[A-Za-z_][\w-]*)` },
+    { text: '#', kinds: [], guard: String.raw`[^{};]*$`, symbolPattern: String.raw`#(-?[A-Za-z_][\w-]*)` },
+  ],
+  propertyValues: CSS_PROPERTY_VALUES,
   blocks: blocks(BRACE, ['@media', '@supports', '@container', '@layer', '@font-face', '@page', '@scope']),
 };
 
