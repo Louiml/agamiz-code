@@ -19,8 +19,15 @@ export interface RunConfiguration {
   cwd?: string;
   /** env vars */
   env?: Record<string, string>;
-  /** launch debugger instead of running */
-  request?: 'launch' | 'attach';
+  /**
+   * How to start it.
+   *
+   * `run` is the plain "execute this and stream the output" case, used by
+   * configurations that come from somewhere other than a debugger - a
+   * `package.json` script, for instance. `launch`/`attach` are the two debugger
+   * requests and imply a debug adapter.
+   */
+  request?: 'launch' | 'attach' | 'run';
   /** stop at first line when debugging (node --inspect-brk) */
   stopOnEntry?: boolean;
   schematic: 'debug-run';

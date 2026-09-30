@@ -24,6 +24,12 @@ interface ExecutionControlsProps {
   /** False when the file type has no runner at all. */
   canRun: boolean;
   canDebug: boolean;
+  /** Scripts discovered from `package.json`, as `name -> script` pairs. */
+  scriptOptions: { name: string; script: string }[];
+  /** The script the run button will launch; null when running the active file. */
+  selectedScript: string | null;
+  onSelectScript: (script: string | null) => void;
+  onRunScript: (script: string) => void;
 }
 
 const STATUS_TEXT: Record<ExecutionState['status'], string | null> = {
@@ -58,11 +64,17 @@ export default function ExecutionControls({
   onOpenInterpreter,
   onOpenDebugConsole,
   onEditConfigurations,
+  scriptOptions,
+  selectedScript,
+  onSelectScript,
+  onRunScript,
   interpreterLabel,
   canRun,
   canDebug,
 }: ExecutionControlsProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [scriptOpen, setScriptOpen] = useState(false);
+  const scriptRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const alive = state.status !== 'idle';
   const statusText = STATUS_TEXT[state.status];
@@ -80,6 +92,23 @@ export default function ExecutionControls({
       window.removeEventListener('keydown', onKey);
     };
   }, [menuOpen]);
+
+  // The script picker is a second popover with its own open state, so it
+  // needs its own dismissal. Sharing the menu popover would close one when
+  // the other opens.
+  useEffect(() => {
+    if (!scriptOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (scriptRef.current && !scriptRef.current.contains(e.target as Node)) setScriptOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setScriptOpen(false);
+    document.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [scriptOpen]);
 
   const toggleMenu = useCallback(() => setMenuOpen((v) => !v), []);
 
@@ -120,6 +149,50 @@ export default function ExecutionControls({
           <span className="w-2 h-2 rounded-[1px] bg-white" />
           Stop
         </button>
+      )}
+
+      {/*
+        A Node project declares its own run targets in `package.json`. The
+        picker sits next to Run rather than replacing it, because running the
+        active file is still the right thing most of the time and "Run" has to
+        keep meaning that.
+      */}
+      {scriptOptions.length > 0 && (
+        <div className="relative" ref={scriptRef}>
+          <button
+            onClick={() => setScriptOpen((v) => !v)}
+            title="Choose a package.json script to run"
+            data-tour="run-script"
+            className="h-full px-2 inline-flex items-center gap-1 text-[11px] text-ide-muted hover:bg-ide-hover hover:text-ide-fg max-w-[170px]"
+          >
+            <span className="truncate">
+              {selectedScript ?? 'Run active file'}
+            </span>
+            <Icon name="chevron-down" size={10} />
+          </button>
+          {scriptOpen && (
+            <div className="absolute right-0 top-full mt-1 z-[130] min-w-[200px] max-w-[320px] bg-zinc-900 border border-ide-border rounded-md shadow-2xl py-1 overflow-y-auto max-h-72">
+              <button
+                onClick={() => { onSelectScript(null); setScriptOpen(false); }}
+                className={`w-full text-left px-3 py-1 text-[11px] hover:bg-ide-hover ${selectedScript === null ? 'text-ide-accent' : 'text-ide-fg'}`}
+              >
+                Run active file
+              </button>
+              <div className="my-1 border-t border-ide-border" />
+              {scriptOptions.map((opt) => (
+                <button
+                  key={opt.script}
+                  onClick={() => { onSelectScript(opt.script); onRunScript(opt.script); setScriptOpen(false); }}
+                  title={opt.name}
+                  className={`w-full text-left px-3 py-1 text-[11px] hover:bg-ide-hover flex items-center gap-2 ${selectedScript === opt.script ? 'text-ide-accent' : 'text-ide-fg'}`}
+                >
+                  <Icon name="terminal" size={10} className="shrink-0 opacity-60" />
+                  <span className="truncate">{opt.script}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       <div className="inline-flex items-stretch rounded overflow-hidden">

@@ -77,7 +77,8 @@ import {
   loadWorkspaceSettings,
   WorkspaceSettings,
 } from './features/interpreter';
-import { loadLaunchFile, LaunchFile } from './features/runconfigs';
+import { loadLaunchFile, LaunchFile, RunConfiguration } from './features/runconfigs';
+import { discoverProjectScripts, PackageManager } from './features/packageScripts';
 import NewProjectDialog, { CreateProjectRequest, ProjectPathStatus } from './components/NewProjectDialog';
 import { allProjectTemplates, type ProjectTemplate } from './features/projectTemplates';
 
@@ -153,6 +154,27 @@ export default function IDE() {
   const [toolchainSettings, setToolchainSettings] = useState<WorkspaceSettings>({});
   const [interpreterPickerOpen, setInterpreterPickerOpen] = useState(false);
   const [launchFile, setLaunchFile] = useState<LaunchFile | null>(null);
+  /**
+   * Scripts found in the workspace, tagged with the root they came from.
+   *
+   * The root is kept so the derived values below can refuse to show a previous
+   * workspace's scripts. That is also what lets the discovery effect set state
+   * only from its async continuation: clearing on the way out would be a
+   * synchronous `setState` in an effect, which cascades a render on every
+   * workspace change.
+   */
+  const [discovered, setDiscovered] = useState<{
+    root: string;
+    configs: RunConfiguration[];
+    manager: PackageManager;
+  } | null>(null);
+  /** The user's pick: a script name, or null to run the active file. */
+  const [scriptChoice, setScriptChoice] = useState<string | null>(null);
+
+  const scriptsForThisRoot = discovered && discovered.root === currentPath ? discovered : null;
+  const projectScripts = useMemo(() => scriptsForThisRoot?.configs ?? [], [scriptsForThisRoot]);
+  const packageManager: PackageManager = scriptsForThisRoot?.manager ?? 'npm';
+  const selectedScript = scriptsForThisRoot ? scriptChoice : null;
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [bottomOpen, setBottomOpen] = useState(false);
   const [bottomTab, setBottomTab] = useState<BottomTabId>('terminal');
@@ -1173,7 +1195,72 @@ export default function IDE() {
   const runConfigName = launchFile?.configurations[0]?.name ?? null;
   const runConfigCount = launchFile?.configurations.length ?? 0;
 
+  /**
+   * A Node project already says how it is meant to be run, in `package.json`.
+   * Those scripts become run targets so the toolbar can launch them without the
+   * user hand-writing argv, and without us guessing an entry point the project
+   * may not have.
+   *
+   * `tabs` is in the dependencies on purpose: saving `package.json` mutates a
+   * tab, so a newly added script shows up without reloading the window.
+   */
+  useEffect(() => {
+    if (!currentPath) return;
+    let disposed = false;
+    discoverProjectScripts(currentPath)
+      .then((found) => {
+        if (disposed) return;
+        if (!found) {
+          setDiscovered(null);
+          setScriptChoice(null);
+          return;
+        }
+        setDiscovered({ root: currentPath, configs: found.configs, manager: found.manager });
+        // Default to `dev`, then `start`. Either is what a developer reaches for
+        // far more often than anything else, so the run button does the obvious
+        // thing without a click.
+        const preferred =
+          found.configs.find((c) => c.args?.[1] === 'dev')
+          ?? found.configs.find((c) => c.args?.[1] === 'start')
+          ?? found.configs[0];
+        setScriptChoice(preferred?.args?.[1] ?? null);
+      })
+      .catch(() => {});
+    return () => { disposed = true; };
+  }, [currentPath, tabs]);
+
+  /** Run a discovered `package.json` script through the backend. */
+  const runPackageScript = useCallback(async (script: string) => {
+    if (!currentPath) return;
+    setConsoleOutput([]);
+    setIsRunning(true);
+    setBottomTab('output');
+    setBottomOpen(true);
+    try {
+      await invoke('run_package_script', {
+        id: 9001,
+        root: currentPath,
+        manager: packageManager,
+        script,
+      });
+    } catch (e) {
+      setConsoleOutput([{
+        type: 'error',
+        content: `Could not run ${packageManager} run ${script}: ${errText(e)}`,
+        timestamp: new Date(),
+        role: 'run',
+      }]);
+      setIsRunning(false);
+    }
+  }, [currentPath, packageManager]);
+
   const handleRun = useCallback(async () => {
+    // A selected script is the run target. The dropdown labels what Run will
+    // do, so Run has to do that rather than quietly running the active file.
+    if (selectedScript) {
+      await runPackageScript(selectedScript);
+      return;
+    }
     if (!activeTab?.path) {
       showToast('Save the file first — running needs a path on disk', 'info');
       return;
@@ -1191,7 +1278,7 @@ export default function IDE() {
       // Scratch buffers have no file; Rak runs from the buffer contents.
       source: activeTab.content,
     });
-  }, [activeTab, currentPath, toolchainSettings, interpreters, runMode, showToast]);
+  }, [activeTab, currentPath, toolchainSettings, interpreters, runMode, showToast, selectedScript, runPackageScript]);
 
   const handleDebug = useCallback(async () => {
     if (!activeTab?.path) {
@@ -1738,6 +1825,12 @@ export default function IDE() {
           onOpenInterpreter={handleOpenInterpreter}
           onOpenDebugConsole={() => { setBottomTab('debug'); setBottomOpen(true); }}
           onEditConfigurations={() => { setActivity('run'); setSidebarOpen(true); showToast('Edit .vscode/launch.json to add run and debug configurations', 'info'); }}
+          scriptOptions={projectScripts
+            .map((c) => ({ name: c.name, script: c.args?.[1] ?? '' }))
+            .filter((o) => o.script !== '')}
+          selectedScript={selectedScript}
+          onSelectScript={setScriptChoice}
+          onRunScript={(s) => { void runPackageScript(s); }}
           interpreterLabel={execution.interpreter?.label ?? 'No interpreter'}
           canRun={!!activeTab?.path && (execution.descriptor?.runnable ?? false)}
           canDebug={!!activeTab?.path && (execution.descriptor?.debuggable ?? false)}

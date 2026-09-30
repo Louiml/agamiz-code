@@ -15,6 +15,7 @@ mod thumbbar;
 mod dap;
 mod executor;
 mod interpreter;
+mod pkg;
 mod terminal;
 
 // Lua extension framework: manifest validation, the sandboxed mlua host, the
@@ -1132,6 +1133,56 @@ fn proc_stop() -> Result<(), String> {
     Ok(())
 }
 
+/// Run one `package.json` script in the workspace, streaming its output.
+///
+/// The script name comes out of a manifest that arrived with a clone, and it
+/// is interpolated into a `cmd /C` line on Windows, so it is validated before
+/// it goes anywhere near a process. The working directory is confined to the
+/// open workspace for the same reason: a manifest cannot point the runner at
+/// an arbitrary folder.
+#[tauri::command]
+fn run_package_script(
+    app: AppHandle,
+    id: u64,
+    root: String,
+    manager: String,
+    script: String,
+) -> Result<String, String> {
+    let dir = confine_to_workspace(&root)?;
+    let is_windows = cfg!(windows);
+    let (program, args, display) = pkg::package_script_argv(&manager, &script, is_windows)?;
+
+    let mut child = Command::new(&program)
+        .args(&args)
+        .current_dir(&dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("failed to start {display}: {e}"))?;
+
+    let stdin = child.stdin.take();
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+
+    {
+        let mut map = PROCS.lock().unwrap();
+        if let Some(mut prev) = map.remove(&id) {
+            let _ = prev.kill();
+            let _ = prev.wait();
+        }
+        map.insert(id, child);
+    }
+    if let Some(si) = stdin {
+        PROC_STDIN.lock().unwrap().insert(id, si);
+    }
+
+    forward_proc_output(app.clone(), id, stdout);
+    forward_proc_error(app.clone(), id, stderr);
+    wait_proc(app.clone(), id);
+    Ok(display)
+}
+
 /// Start a Node.js inspector session for debugging. Boots `node` in
 /// `--inspect-brk` mode, parses the `ws://` debugging port from stderr, streams
 /// program output to `proc-output`, emits `proc-done`, and returns the WS URL.
@@ -1664,6 +1715,7 @@ pub fn run() {
             spawn_program,
             proc_write,
             proc_stop,
+            run_package_script,
             node_inspect,
             lsp_start,
             lsp_send,
