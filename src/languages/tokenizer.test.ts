@@ -146,6 +146,44 @@ describe('shapes', () => {
   });
 });
 
+describe('regex literals', () => {
+  // `regexLiteral` was declared by Rak and JavaScript but never read by the
+  // tokenizer, so a regex was highlighted as a run of identifiers and operators.
+  it('scans a regex in operand position', () => {
+    const out = tokenize('let re = /ab+c/gi;', 'rak');
+    const strings = out[0]?.filter((t) => t.type === 'string') ?? [];
+    expect(strings.map((t) => t.value)).toContain('/ab+c/gi');
+  });
+
+  it('scans a regex after an opening paren', () => {
+    const out = tokenize('f(/x+/);', 'javascript');
+    expect(out[0]?.some((t) => t.type === 'string' && t.value === '/x+/')).toBe(true);
+  });
+
+  it('treats a slash after an identifier as division, not a regex', () => {
+    // The case that makes the operand test necessary: there is no closing slash
+    // on the line, so a naive rule would either swallow the line or mis-tokenise.
+    const out = tokenize('a / b', 'javascript');
+    expect(out[0]?.some((t) => t.type === 'op' && t.value.includes('/'))).toBe(true);
+  });
+
+  it('does not scan a regex in a language that has none', () => {
+    // Rust has no regex literals, so `/` there is always division.
+    const out = tokenize('let a = b / c;', 'rust');
+    expect(out[0]?.some((t) => t.type === 'string')).toBe(false);
+  });
+
+  it('handles a character class containing a slash', () => {
+    const out = tokenize('let re = /[/]/;', 'rak');
+    expect(out[0]?.some((t) => t.type === 'string' && t.value === '/[/]/')).toBe(true);
+  });
+
+  it('handles an escaped slash', () => {
+    const out = tokenize('let re = /a\\/b/;', 'rak');
+    expect(out[0]?.some((t) => t.type === 'string')).toBe(true);
+  });
+});
+
 describe('token coverage', () => {
   it('emits a type for every character', () => {
     // Reconstructing the input is the property that matters: the highlight

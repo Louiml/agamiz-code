@@ -40,6 +40,52 @@ function lastSig(out: Token[]): Token | null {
   return null;
 }
 
+/**
+ * Whether the previous meaningful token can end an expression.
+ *
+ * This is what distinguishes a regex literal from a division: in `a / b` the
+ * preceding token is an identifier, so `/` is division, while after `=`, `(` or
+ * `return` the `/` opens a regex. Without it, Rak and JavaScript regexes were
+ * highlighted as a run of identifiers and operators.
+ */
+function canEndExpr(t: Token | null): boolean {
+  if (!t) return false; // start of line -> operand position
+  if (['ident', 'number', 'float', 'string', 'char', 'macro', 'tag', 'attr', 'property'].includes(t.type)) {
+    return true;
+  }
+  if (t.type === 'op' && [')', ']', '}'].includes(t.value)) return true;
+  return false;
+}
+
+/**
+ * Characters after which a `/` opens a regex rather than dividing.
+ *
+ * Used to break up a glued operator run: in `f(/x+/)` the run is `(/`, and the
+ * `(` is what says the next token is an operand.
+ */
+const OPENS_OPERAND = /[([{,;:=+\-*%&|^!~<>?]/;
+
+/** Scan a regex literal starting at `s`, returning null if it cannot close. */
+function readRegex(text: string, s: number): { value: string; end: number } | null {
+  let j = s + 1;
+  let inClass = false;
+  while (j < text.length) {
+    const c = text[j];
+    if (c === '\\') { j += 2; continue; }
+    if (c === '[') { inClass = true; j++; continue; }
+    if (c === ']') { inClass = false; j++; continue; }
+    // An unterminated literal is almost certainly a division or a stray slash,
+    // so bail rather than swallowing the rest of the line.
+    if (c === '/' && !inClass) {
+      j++;
+      while (j < text.length && /[a-z]/i.test(text[j])) j++;
+      return { value: text.slice(s, j), end: j };
+    }
+    j++;
+  }
+  return null;
+}
+
 function readId(text: string, s: number): { value: string; end: number } {
   let j = s;
   while (j < text.length && isIdPart(text[j])) j++;
@@ -292,11 +338,37 @@ function scanLine(line: string, lang: LanguageDef, L: Lookups, state: CarryState
       continue;
     }
 
+    // regex literals, in operand position only.
+    //
+    // Must come before the operator rule or `/` is always punctuation. Only
+    // languages that declare `regexLiteral` reach this, and only when the
+    // previous token cannot end an expression — otherwise `a / b` would try to
+    // open a regex and, finding no closing slash on the line, fall through to
+    // the operator branch unchanged.
+    if (lang.regexLiteral && c === '/' && !canEndExpr(lastSig(out))) {
+      const r = readRegex(line, i);
+      if (r) { out.push({ type: 'string', value: r.value }); i = r.end; continue; }
+    }
+
     // operators / punctuation
     let emit = '';
     for (let Lx = 3; Lx >= 1; Lx--) {
       const cand = line.slice(i, i + Lx);
       if (cand.length === Lx && /^[+\-*/%&|^!~<>=.,:;()\[\]{}@?#]+$/.test(cand)) { emit = cand; break; }
+    }
+    // The run above is greedy, so it happily glued `(` and `/` into one token —
+    // consuming the regex opener before the regex branch could see it, so
+    // `f(/x+/)` came out as punctuation. When the run *begins* with something
+    // that leaves us expecting an operand, stop it before any `/` so the next
+    // iteration sees the slash.
+    //
+    // The test is on the run's first character, not on the previous token: for
+    // `f(/` the previous token is the identifier `f`, which would say "this is
+    // division", but the `(` in between is what puts us back in operand
+    // position.
+    if (emit && lang.regexLiteral && OPENS_OPERAND.test(emit[0])) {
+      const slash = emit.indexOf('/', 1);
+      if (slash > 0) emit = emit.slice(0, slash);
     }
     if (emit) {
       out.push({ type: 'op', value: emit });
