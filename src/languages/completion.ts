@@ -538,6 +538,20 @@ function serviceSuggestions(
  * as a plain identifier turned `text-al` into `al`, and the popup then offered
  * `align-content` where the user wanted `text-align`.
  */
+/**
+ * The language's own snippets, for merging with the service's rows.
+ *
+ * The services know every valid name but know nothing about snippets, and
+ * returning their rows exclusively pushed ours off the list entirely: `hov`
+ * offered `:hover` from the CSS service and not the `hover` snippet, and `do`
+ * put the `download` attribute above the `doctype` snippet. Merging them and
+ * ranking together gets both, with `rank` putting a real vocabulary match ahead
+ * of an equally-good snippet.
+ */
+function snippetsFor(languageId: string): Suggestion[] {
+  return getCompletionPool(languageId).filter((s) => s.kind === 'snippet');
+}
+
 function shape(
   all: Suggestion[],
   source: string,
@@ -546,7 +560,7 @@ function shape(
   languageId: string,
 ): Suggestion[] {
   const prefix = wordAt(source, offset, languageId).toLowerCase();
-  const matched = prefix ? rank(all, prefix) : all;
+  const matched = prefix ? rank([...all, ...snippetsFor(languageId)], prefix) : all;
   return dedupeByLabel(rankMarkupSuggestions(matched)).slice(0, MARKUP_POPUP);
 }
 

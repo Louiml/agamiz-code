@@ -4,7 +4,7 @@ import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react'
 import EditorContextMenu from './EditorContextMenu';
 import { Icon, IconName } from './Icon';
 import { getSuggestions, wordAt, Suggestion } from '../../languages/completion';
-import { expandSnippet } from '../../languages/snippetText';
+import { expandSnippet, reindentSnippet } from '../../languages/snippetText';
 import { EditorHistory } from '../features/editorHistory';
 import { indentBlock, outdentBlock } from '../features/indent';
 import { contextAt, decideAutoClose } from '../features/autoClose';
@@ -500,7 +500,14 @@ export default function CodeEditor({
     // `alt="$1"` means "an empty string attribute with the caret between the
     // quotes". Inserted raw, that types a literal `$1` into the file.
     const raw = suggestion.body ?? suggestion.label;
-    const { text: inserted, caret: stopAt } = expandSnippet(raw);
+    const { text: expanded, caret: stopAt } = expandSnippet(raw);
+    // Snippet bodies are authored with four spaces per level and carry no indent
+    // of their own, so a fragment inserted into a two-space file arrived with
+    // four-space blocks inside it. Re-indent to this line and the editor's
+    // configured unit.
+    const lineStart = buffer.text.lastIndexOf('\n', Math.max(0, from - 1)) + 1;
+    const base = /^[ \t]*/.exec(buffer.text.slice(lineStart, from))![0];
+    const inserted = reindentSnippet(expanded, base, insertSpaces ? ' '.repeat(tabSize) : '\t');
     const newValue = newBefore + inserted + after;
     // Anchor at the start of the replaced span so a completion is its own undo
     // step rather than merging into the typing that preceded it.

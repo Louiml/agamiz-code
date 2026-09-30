@@ -90,3 +90,43 @@ export function expandSnippet(body: string): ExpandedSnippet {
   const target = exit ?? stops[0];
   return { text: out, caret: Math.min(target.at, out.length) };
 }
+
+/**
+ * The indent a snippet body was authored with.
+ *
+ * Bodies in `builtin/snippets.ts` are written with four spaces per level,
+ * expanded from a shared constant at module load. Treating that as *one level*
+ * rather than as literal text is what lets a body follow the editor's own
+ * `tabSize` and `insertSpaces` instead of always inserting four spaces.
+ */
+const AUTHORED_INDENT = 4;
+
+/**
+ * Re-indent an inserted body to the caret's line and the editor's indent unit.
+ *
+ * The first line is left alone: it is spliced into the middle of an existing
+ * line, so it already carries whatever indent that line had. Continuation lines
+ * keep their *relative* depth, converted from the authored four spaces to
+ * `unit`, and are then shifted by `base` so the fragment lines up with the line
+ * it was inserted on.
+ *
+ * A blank line is left completely empty rather than given trailing whitespace.
+ */
+export function reindentSnippet(text: string, base: string, unit: string): string {
+  const lines = text.split('\n');
+  if (lines.length === 1) return text;
+  return lines
+    .map((line, i) => {
+      if (i === 0) return line;
+      // A genuinely empty line stays empty, so the fragment does not gain
+      // trailing whitespace on its blank lines.
+      if (line.length === 0) return line;
+      const lead = /^[ \t]*/.exec(line)![0];
+      // Depth zero is normal and meaningful: a closing `</div>` is written at
+      // column 0 in the authored body and still has to move with the fragment,
+      // or it lands at the start of the line in an indented block.
+      const depth = Math.round(lead.length / AUTHORED_INDENT);
+      return base + unit.repeat(depth) + line.slice(lead.length);
+    })
+    .join('\n');
+}
