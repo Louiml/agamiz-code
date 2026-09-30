@@ -4,6 +4,7 @@ import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react'
 import EditorContextMenu from './EditorContextMenu';
 import { Icon, IconName } from './Icon';
 import { getSuggestions, wordAt, Suggestion } from '../../languages/completion';
+import { expandSnippet } from '../../languages/snippetText';
 import { EditorHistory } from '../features/editorHistory';
 import { indentBlock, outdentBlock } from '../features/indent';
 import { contextAt, decideAutoClose } from '../features/autoClose';
@@ -486,26 +487,38 @@ export default function CodeEditor({
     if (!textareaRef.current) return;
     const ta = textareaRef.current;
     const pos = ta.selectionStart;
-    const before = buffer.text.substring(0, pos);
-    const after = buffer.text.substring(pos);
     const wordMatch = wordAt(buffer.text, pos, languageId);
-    // Predictions / forced inserts replace nothing when there is no word prefix.
-    const newBefore = wordMatch ? before.substring(0, before.length - wordMatch.length) : before;
-    const inserted = suggestion.body ?? suggestion.label;
+    // A language service hands back the exact span it judged to be the token,
+    // which is authoritative and is preferred over re-deriving one. It is the
+    // only thing that gets `<img al` (the attribute name alone) and a CSS value
+    // right, neither of which is a plain word boundary.
+    const from = suggestion.replaceStart ?? (wordMatch ? pos - wordMatch.length : pos);
+    const to = suggestion.replaceEnd ?? pos;
+    const newBefore = buffer.text.substring(0, from);
+    const after = buffer.text.substring(to);
+    // Language services return bodies in VS Code's snippet syntax, where
+    // `alt="$1"` means "an empty string attribute with the caret between the
+    // quotes". Inserted raw, that types a literal `$1` into the file.
+    const raw = suggestion.body ?? suggestion.label;
+    const { text: inserted, caret: stopAt } = expandSnippet(raw);
     const newValue = newBefore + inserted + after;
-    // Anchor at the start of the replaced word so a completion is its own undo
+    // Anchor at the start of the replaced span so a completion is its own undo
     // step rather than merging into the typing that preceded it.
-    commit(newValue, newBefore.length, newBefore.length);
-
+    commit(newValue, from, from);
     // Land the caret on the first line of the body that is not a closing
     // delimiter, which is the blank line the fragment left for the user. The
     // indent is read from the body rather than assumed, so `{ … }`, `: …` and
-    // `… end` fragments all work.
+    // `… end` fragments all work. A body with tabstops says where it wants the
+    // caret, and that wins.
     let cursorOffset = newBefore.length + inserted.length;
-    const firstNewline = inserted.indexOf('\n');
-    if (firstNewline !== -1) {
-      const rest = inserted.slice(firstNewline + 1);
-      cursorOffset = newBefore.length + firstNewline + 1 + (/^[ \t]*/.exec(rest)![0].length);
+    if (stopAt !== undefined) {
+      cursorOffset = newBefore.length + stopAt;
+    } else {
+      const firstNewline = inserted.indexOf('\n');
+      if (firstNewline !== -1) {
+        const rest = inserted.slice(firstNewline + 1);
+        cursorOffset = newBefore.length + firstNewline + 1 + (/^[ \t]*/.exec(rest)![0].length);
+      }
     }
     setTimeout(() => {
       if (textareaRef.current) {

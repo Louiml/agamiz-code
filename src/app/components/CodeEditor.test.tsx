@@ -569,10 +569,10 @@ describe('accepting a completion', () => {
     const row = firstRow();
     expect(row?.textContent ?? '').toContain('text-align');
     fireEvent.click(row!);
-    // The property word inserts `text-align: `, so the trailing space from the
-    // original value follows it.
-    expect(ta.value).toBe('.a { text-align:  }');
-  });
+    // The service's body is a real property, its colon, and an exit marker; the
+    // marker becomes the caret position and the semicolon stays put.
+    expect(ta.value).toBe('.a { text-align: ; }');
+});
 });
 
 describe('gutter', () => {

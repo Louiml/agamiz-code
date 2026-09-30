@@ -1,5 +1,7 @@
 import { getLanguage } from './registry';
 import { getRegisteredSnippets, snippetRegistryVersion } from './snippets';
+import { embeddedRegionAt } from './services/htmlRegions';
+import { MARKUP_FETCH, markupSuggestions, rankMarkupSuggestions } from './services/markupCompletion';
 import type {
   BlockSnippet,
   CompletionKind,
@@ -18,13 +20,23 @@ import type {
  */
 
 /** One row in the completion popup. */
-export interface Suggestion {
-  label: string;
+export interface Suggestion {  label: string;
   kind: CompletionKind;
   /** Text inserted on accept; defaults to `label`. */
   body?: string;
   /** Secondary text shown to the right of the label. */
   detail?: string;
+  /**
+   * Absolute span this completion replaces, when the producer knows it.
+   *
+   * A language service returns a `TextEdit` with the exact range it judged to
+   * be the token, and that is not always what a word-boundary scan would pick:
+   * for `text-ali` a word scan is right, but for `<img al` the token is the
+   * attribute name only, and for a CSS value it is the value only. When these
+   * are set the editor replaces exactly this span instead of re-deriving one.
+   */
+  replaceStart?: number;
+  replaceEnd?: number;
 }
 
 export interface CompletionRequest {
@@ -325,6 +337,14 @@ export function getSuggestions(req: CompletionRequest): Suggestion[] {
   const limit = req.limit ?? (force ? 16 : 8);
   const prediction = getPrediction(languageId, before);
 
+  // The HTML and CSS language services answer from the same data VS Code uses.
+  // They are consulted first and on their own terms: they know the caret's tag,
+  // the property being completed, and the value expected, none of which the
+  // word-prefix engine can see. Whatever they do not cover falls through to the
+  // data-driven path below, so nothing is lost by asking them.
+  const fromService = serviceSuggestions(languageId, source, offset, limit);
+  // Not re-sliced to limit: shape has already applied the markup popup size, which is deliberately larger so valid-but-uncommon entries stay reachable by scrolling.
+  if (fromService.length > 0) return dedupeByLabel(fromService);
   if (prefix) {
     const matches = rank(candidatePool(languageId, source, prediction), prefix).slice(0, limit);
     // Nothing to add and the typed word is already complete: stay out of the way.
@@ -439,6 +459,110 @@ function candidatePool(
     ...extractBufferSymbols(source, languageId),
     ...getCompletionPool(languageId),
   ];
+}
+
+/**
+ * Suggestions from the HTML and CSS language services, or an empty list.
+ *
+ * Import is deferred to the call site rather than the top of the module so that
+ * a buffer which is not markup never pays for loading either service.
+ */
+/**
+ * Rows the markup popup is given.
+ *
+ * Deliberately more than the eight the data-driven path returns. The popup is
+ * a scrollable list, so a wider one costs nothing and is the difference
+ * between order-radius being reachable by scrolling and not existing:
+ * slicing the service's list to eight hid everything past the eighth
+ * alphabetical entry.
+ */
+const MARKUP_POPUP = 60;
+
+function serviceSuggestions(
+  languageId: string,
+  source: string,
+  offset: number,
+  limit: number,
+): Suggestion[] {
+  if (languageId !== 'html' && languageId !== 'css') return [];
+
+  // Inside `<style>`/`<script>` the outer language does not apply at all:
+  // offering HTML attributes in a stylesheet is worse than offering nothing.
+  const region = embeddedRegionAt(source, offset);
+  if (region) {
+    if (region.language === 'css') {
+      const all = markupSuggestions({
+        language: 'html',
+        source,
+        offset,
+        limit: MARKUP_FETCH,
+        embedded: region,
+      });
+      // 'css', not the outer languageId: inside <style> the caret is in a
+      // stylesheet, so the prefix has to be read with the CSS word pattern.
+      // Using the outer language turned 	ext-al into l and offered
+      // align-* instead.
+      return shape(all, source, offset, limit, 'css');
+    }
+    // There is no JavaScript service in this project, so a `<script>` body is
+    // completed as JavaScript by recursing with the region as the document.
+    // Without this the popup offered HTML attributes inside a script tag.
+    const regionText = source.slice(region.start, region.end);
+    return getSuggestions({
+      languageId: 'javascript',
+      source: regionText,
+      offset: offset - region.start,
+      limit,
+    });
+  }
+
+  const all = markupSuggestions({ language: languageId, source, offset, limit: MARKUP_FETCH });
+  return shape(all, source, offset, limit, languageId);
+}
+
+/**
+ * Turn the service's raw list into popup rows.
+ *
+ * The service returns every valid name for the position and expects the client
+ * to match against what the user typed, so filtering happens here. Two things
+ * would each be wrong on their own:
+ *
+ *  - promoting without filtering puts `div` and `span` above the `details` and
+ *    `dialog` the user asked for by typing `<de`;
+ *  - filtering without promoting puts `accesskey` and `autocapitalize` above
+ *    the `id` and `class` that are on nearly every tag.
+ *
+ * So: match on the prefix first, then promote within the matches.
+ *
+ * The prefix has to be read with the language's own word pattern. Reading it
+ * as a plain identifier turned `text-al` into `al`, and the popup then offered
+ * `align-content` where the user wanted `text-align`.
+ */
+function shape(
+  all: Suggestion[],
+  source: string,
+  offset: number,
+  limit: number,
+  languageId: string,
+): Suggestion[] {
+  const prefix = wordAt(source, offset, languageId).toLowerCase();
+  const matched = prefix ? rank(all, prefix) : all;
+  return dedupeByLabel(rankMarkupSuggestions(matched)).slice(0, MARKUP_POPUP);
+}
+
+/**
+ * The language a position should be completed as when it sits inside an
+ * embedded region, or `undefined` at the top level.
+ *
+ * `<script>` bodies are completed as JavaScript using this project's own data,
+ * since there is no JavaScript service dependency.
+ */
+export function embeddedLanguageAt(
+  source: string,
+  offset: number,
+): { language: string; start: number; end: number } | undefined {
+  const region = embeddedRegionAt(source, offset);
+  return region ? { language: region.language, start: region.start, end: region.end } : undefined;
 }
 
 /** Drops cached pools/regexes; called when a language or snippets change. */

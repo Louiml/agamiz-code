@@ -146,20 +146,28 @@ console.log('\n6b. a trigger opens the list where there is no word');
   const tags = getSuggestions({ languageId: 'html', source: '<', offset: 1, limit: 40 }).map((s) => s.label);
   check('html < offers tags', tags.includes('div') && tags.includes('section'), tags.join(','));
   check('html < offers no attributes', !tags.includes('href'), tags.join(','));
-  check('html < list is capped by limit', labels('<', 'html').length <= 8);
-  check('closing tag trigger', labels('</', 'html').includes('div'), labels('</', 'html').join(','));
-  // `color: ` has no word either, but CSS wants the value list.
+  // Markup is answered by the language services, which return every valid name for the position and are cut to a wider popup size. The popup scrolls, and capping at eight put order-radius past the end of the list, i.e. nowhere.
+  check('html < list is capped', labels('<', 'html').length <= 60, String(labels('<', 'html').length));
+  check('closing tag offers the tag that is open', labels('<div></', 'html').includes('/div'), labels('<div></', 'html').join(','));
   // The intent is that a colon opens the value list. Which values is the
-  // sharper question: this used to assert lex, a display keyword, for
-  // color: - the property-agnostic list. Values are now property-aware, so
-  // color:  leads with colours and display:  with display keywords.
-  const colorVals = labels('color: ', 'css');
-  check('css after a colon offers values', colorVals.length > 0, colorVals.join(','));
-  check('css color: offers colours, not display keywords',
-    colorVals.includes('red') && !colorVals.slice(0, 8).includes('flex'), colorVals.join(','));
-  const displayVals = labels('display: ', 'css');
-  check('css display: offers display keywords',
-    displayVals.includes('flex') && displayVals.includes('block'), displayVals.join(','));
+  // sharper question: this used to assert a display keyword for a colour
+  // property, from one property-agnostic list.
+  //
+  // The fragment needs a block in it. Handed a bare "color: " with no enclosing
+  // braces the CSS service has no declaration context and answers with
+  // selectors, so the colour never appears. Every real file has the block.
+  const colorVals = labels('.a { color: ', 'css');
+  check(
+    'css color: offers colours, not display keywords',
+    colorVals.includes('red') && !colorVals.slice(0, 8).includes('flex'),
+    colorVals.slice(0, 8).join(','),
+  );
+  const displayVals = labels('.a { display: ', 'css');
+  check(
+    'css display: offers display keywords',
+    displayVals.includes('flex') && displayVals.includes('block'),
+    displayVals.slice(0, 8).join(','),
+  );
   check('languages without triggers stay quiet', labels('( ', 'python').length === 0);
 }
 
