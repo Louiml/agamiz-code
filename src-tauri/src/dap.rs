@@ -134,10 +134,7 @@ fn specs_for(language: &str) -> Vec<&'static AdapterSpec> {
 /// module in the active interpreter far more often than as a script, so the
 /// probe falls back to `python -m debugpy --version`.
 #[tauri::command]
-pub fn list_debug_adapters(
-    language: String,
-    tools: HashMap<String, String>,
-) -> Vec<AdapterInfo> {
+pub fn list_debug_adapters(language: String, tools: HashMap<String, String>) -> Vec<AdapterInfo> {
     let mut out = Vec::new();
     let wanted = specs_for(&language);
 
@@ -229,7 +226,10 @@ fn pump_messages(app: AppHandle, session: u64, stdout: std::process::ChildStdout
                 return;
             }
             let text = String::from_utf8_lossy(&body).to_string();
-            if app.emit("dap-message", DapMessage { session, text }).is_err() {
+            if app
+                .emit("dap-message", DapMessage { session, text })
+                .is_err()
+            {
                 return;
             }
         }
@@ -308,13 +308,10 @@ pub fn dap_start(
         .take()
         .ok_or_else(|| "Adapter stdout unavailable".to_string())?;
 
-    ADAPTERS.lock().unwrap().insert(
-        session,
-        Adapter {
-            child,
-            stdin,
-        },
-    );
+    ADAPTERS
+        .lock()
+        .unwrap()
+        .insert(session, Adapter { child, stdin });
 
     pump_messages(app, session, stdout);
     Ok(program)

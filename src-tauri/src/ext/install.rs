@@ -61,8 +61,12 @@ pub fn install_from_zip(root: &Path, archive_path: &Path) -> Result<Installed, S
 
     let file = std::fs::File::open(archive_path)
         .map_err(|e| format!("could not open {}: {e}", archive_path.display()))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| format!("{} is not a readable zip archive: {e}", archive_path.display()))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| {
+        format!(
+            "{} is not a readable zip archive: {e}",
+            archive_path.display()
+        )
+    })?;
 
     // Extract to a scratch directory first. It lets us read the manifest
     // before committing to a destination, so an archive with a bad or
@@ -91,7 +95,11 @@ pub fn install_from_zip(root: &Path, archive_path: &Path) -> Result<Installed, S
 /// out to `git` for source control (see `src/app/features/git.ts`), so this
 /// reuses the user's existing git configuration, credentials and proxy setup
 /// instead of shipping a second, differently-configured HTTP stack.
-pub fn install_from_git(root: &Path, url: &str, reference: Option<&str>) -> Result<Installed, String> {
+pub fn install_from_git(
+    root: &Path,
+    url: &str,
+    reference: Option<&str>,
+) -> Result<Installed, String> {
     let url = url.trim();
     if url.is_empty() {
         return Err("git URL is empty".to_string());
@@ -333,7 +341,10 @@ fn copy_tree(source: &Path, destination: &Path) -> Result<(), String> {
     for entry in entries.flatten() {
         let name = entry.file_name();
         let name_text = name.to_string_lossy().to_string();
-        if matches!(name_text.as_str(), ".git" | "node_modules" | "target" | ".venv") {
+        if matches!(
+            name_text.as_str(),
+            ".git" | "node_modules" | "target" | ".venv"
+        ) {
             continue;
         }
         let from = entry.path();
@@ -448,7 +459,9 @@ mod tests {
 
         // The scratch directory must not survive a successful install.
         assert!(
-            !root.join(format!(".install-{}", std::process::id())).exists(),
+            !root
+                .join(format!(".install-{}", std::process::id()))
+                .exists(),
             "the scratch tree should be cleaned up"
         );
 
@@ -470,7 +483,8 @@ mod tests {
             ],
         );
 
-        let installed = install_from_zip(&temp.join("root"), &archive).expect("wrapped zip installs");
+        let installed =
+            install_from_zip(&temp.join("root"), &archive).expect("wrapped zip installs");
         assert_eq!(installed.id, "zipped");
 
         let _ = std::fs::remove_dir_all(&temp);
@@ -493,7 +507,10 @@ mod tests {
 
         let err = install_from_zip(&temp.join("root"), &archive)
             .expect_err("a traversing entry must abort the install");
-        assert!(err.contains("unsafe path") || err.contains("escapes"), "{err}");
+        assert!(
+            err.contains("unsafe path") || err.contains("escapes"),
+            "{err}"
+        );
 
         // Nothing may have been installed.
         assert!(!temp.join("root").join("zipped").exists());
@@ -511,7 +528,10 @@ mod tests {
             &temp.join("bad.zip"),
             &[
                 // Traversal in `main` must be refused by manifest validation.
-                ("extension.json", r#"{"name":"bad","version":"1.0.0","main":"../../x.lua"}"#),
+                (
+                    "extension.json",
+                    r#"{"name":"bad","version":"1.0.0","main":"../../x.lua"}"#,
+                ),
                 ("extension.lua", "function activate() end"),
             ],
         );

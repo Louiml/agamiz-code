@@ -156,9 +156,10 @@ fn init(args: &[String]) -> Result<PathBuf, String> {
     };
     let description = match options.description.clone() {
         Some(value) => value,
-        None if interactive => {
-            prompt("Description", "Adds custom productivity tools to Agamiz Code.")?
-        }
+        None if interactive => prompt(
+            "Description",
+            "Adds custom productivity tools to Agamiz Code.",
+        )?,
         None => "Adds custom productivity tools to Agamiz Code.".to_string(),
     };
     let author = match options.author.clone() {
@@ -176,7 +177,10 @@ fn init(args: &[String]) -> Result<PathBuf, String> {
         None => String::new(),
     };
 
-    let base = options.directory.clone().unwrap_or_else(|| PathBuf::from("."));
+    let base = options
+        .directory
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("."));
     let root = base.join(&name);
     if root.exists() {
         return Err(format!("{} already exists", root.display()));
@@ -185,16 +189,25 @@ fn init(args: &[String]) -> Result<PathBuf, String> {
     std::fs::create_dir_all(root.join("src"))
         .map_err(|e| format!("could not create {}: {e}", root.display()))?;
 
-    write_file(&root.join("extension.json"), &manifest_json(&ManifestInput {
-        name: &name,
-        display_name: &display_name,
-        description: &description,
-        author: &author,
-        repository: &repository,
-    }))?;
-    write_file(&root.join("extension.lua"), &entry_point(&name, &display_name))?;
+    write_file(
+        &root.join("extension.json"),
+        &manifest_json(&ManifestInput {
+            name: &name,
+            display_name: &display_name,
+            description: &description,
+            author: &author,
+            repository: &repository,
+        }),
+    )?;
+    write_file(
+        &root.join("extension.lua"),
+        &entry_point(&name, &display_name),
+    )?;
     write_file(&root.join("src/utils.lua"), UTILS_TEMPLATE)?;
-    write_file(&root.join("README.md"), &readme(&name, &display_name, &description))?;
+    write_file(
+        &root.join("README.md"),
+        &readme(&name, &display_name, &description),
+    )?;
     write_file(&root.join(".gitignore"), GITIGNORE)?;
 
     // Prove the scaffold is loadable before reporting success. A generated
@@ -545,7 +558,7 @@ fn display_dev_root() -> String {
 /// ignored — it just means a console is already attached, or there is none.
 #[cfg(target_os = "windows")]
 fn attach_parent_console() {
-    use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+    use windows::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
     // SAFETY: a plain Win32 call with no arguments to get wrong; the error is
     // deliberately ignored.
     let _ = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
@@ -587,7 +600,9 @@ mod tests {
         });
         let manifest: crate::ext::manifest::ExtensionManifest =
             serde_json::from_str(&json).expect("valid manifest");
-        manifest.validate().expect("host accepts generated manifest");
+        manifest
+            .validate()
+            .expect("host accepts generated manifest");
     }
 
     #[test]

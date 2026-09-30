@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use super::sandbox::HANDLERS_GLOBAL;
-use super::{host, manifest, ExtensionHost, EventSink};
+use super::{host, manifest, EventSink, ExtensionHost};
 
 // ---------------------------------------------------------------------------
 // Test harness
@@ -196,14 +196,12 @@ fn output_paths_must_stay_inside_the_project() {
 fn entry_file_may_name_a_declared_output() {
     // This is the case that makes generator templates usable: the file that
     // opens on create is the generator's, not the IDE's.
-    let templates = try_register(&template_lua(
-        concat!(
-            "        name = \"T\", createCommand = \"proj-test.gen\",\n",
-            "        entryFile = \"main.rak\",\n",
-            "        files = { { path = \"README.md\", content = \"\" } },\n",
-            "        outputs = { \"main.rak\" },"
-        ),
-    ))
+    let templates = try_register(&template_lua(concat!(
+        "        name = \"T\", createCommand = \"proj-test.gen\",\n",
+        "        entryFile = \"main.rak\",\n",
+        "        files = { { path = \"README.md\", content = \"\" } },\n",
+        "        outputs = { \"main.rak\" },"
+    )))
     .expect("a generator entryFile must be accepted");
     assert_eq!(templates[0].entry_file.as_deref(), Some("main.rak"));
     assert_eq!(templates[0].declared_outputs, vec!["main.rak".to_string()]);
@@ -239,7 +237,8 @@ fn registering_a_template_requires_fs_write() {
           "activationEvents": ["*"],
           "permissions": ["ui:notification"]
         }"#;
-    let lua = template_lua("        name = \"T\", files = { { path = \"a.txt\", content = \"\" } },");
+    let lua =
+        template_lua("        name = \"T\", files = { { path = \"a.txt\", content = \"\" } },");
 
     let temp = TempDir::new("proj-noperm");
     let dir = write_extension(temp.path(), "proj-test", without_fs_write, &lua);
@@ -469,7 +468,15 @@ fn dangerous_globals_are_not_reachable() {
         .find(|s| s.key == "sandboxed:os")
         .map(|s| s.text.as_str())
         .unwrap_or_default();
-    for forbidden in ["execute", "exit", "remove", "rename", "getenv", "tmpname", "setlocale"] {
+    for forbidden in [
+        "execute",
+        "exit",
+        "remove",
+        "rename",
+        "getenv",
+        "tmpname",
+        "setlocale",
+    ] {
         assert!(
             !os_keys.split(',').any(|k| k == forbidden),
             "os.{forbidden} must not be reachable (got {os_keys:?})"
@@ -566,8 +573,14 @@ fn ungranted_permission_fails_loudly_rather_than_silently() {
     let (host, _recorder) = host_at(temp.path());
     let err = activate(&host, &dir).expect_err("status bar use must be refused");
 
-    assert!(err.contains("ui:statusbar"), "error should name the permission: {err}");
-    assert!(err.contains("permission"), "error should be actionable: {err}");
+    assert!(
+        err.contains("ui:statusbar"),
+        "error should name the permission: {err}"
+    );
+    assert!(
+        err.contains("permission"),
+        "error should be actionable: {err}"
+    );
     assert!(!host.is_active("noperm"));
 }
 
@@ -590,7 +603,10 @@ fn a_runtime_error_in_activate_does_not_leave_a_vm() {
     );
     let (host, _recorder) = host_at(temp.path());
     let err = activate(&host, &dir).expect_err("activation should fail");
-    assert!(err.contains("intentional failure"), "unexpected error: {err}");
+    assert!(
+        err.contains("intentional failure"),
+        "unexpected error: {err}"
+    );
     assert!(!host.is_active("boom"));
 }
 
@@ -658,7 +674,10 @@ fn one_broken_extension_does_not_block_the_others() {
     let (host, _recorder) = host_at(temp.path());
     host::activate_startup(&host);
 
-    assert!(host.is_active("good"), "the healthy extension must still load");
+    assert!(
+        host.is_active("good"),
+        "the healthy extension must still load"
+    );
     assert!(!host.is_active("bad"));
 }
 
@@ -857,7 +876,10 @@ fn the_shipped_example_extension_loads_and_contributes() {
     let Some(repo) = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent() else {
         return;
     };
-    let example = repo.join("examples").join("extensions").join("hello-agamiz");
+    let example = repo
+        .join("examples")
+        .join("extensions")
+        .join("hello-agamiz");
     if !example.join("extension.json").is_file() {
         eprintln!("skipping: {} not found", example.display());
         return;
@@ -917,7 +939,10 @@ fn the_shipped_example_extension_loads_and_contributes() {
         .expect("the example's insert command runs");
     let requests = recorder.on(super::events::EDITOR);
     assert_eq!(requests.len(), 1);
-    assert!(requests[0]["text"].as_str().unwrap().contains("added by Hello Agamiz"));
+    assert!(requests[0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("added by Hello Agamiz"));
 }
 
 /// The `rak-project` example must register a New Project template.
@@ -997,10 +1022,7 @@ fn the_rak_example_registers_a_project_template() {
         template
             .create_command
             .as_deref()
-            .is_some_and(|id| snapshot
-                .commands
-                .iter()
-                .any(|c| c.id == id)),
+            .is_some_and(|id| snapshot.commands.iter().any(|c| c.id == id)),
         "createCommand must reference a command this extension registered"
     );
 
@@ -1047,7 +1069,10 @@ fn the_rak_examples_extension_contributes_every_example() {
     let Some(repo) = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent() else {
         return;
     };
-    let dir = repo.join("examples").join("extensions").join("rak-examples");
+    let dir = repo
+        .join("examples")
+        .join("extensions")
+        .join("rak-examples");
     if !dir.join("extension.json").is_file() {
         eprintln!("skipping: {} not found", dir.display());
         return;
@@ -1067,17 +1092,23 @@ fn the_rak_examples_extension_contributes_every_example() {
             snap.commands.len()
         );
         assert!(
-            snap.commands.iter().all(|c| c.extension_id == "rak-examples"),
+            snap.commands
+                .iter()
+                .all(|c| c.extension_id == "rak-examples"),
             "commands must be attributed to the example"
         );
         snap.commands.iter().map(|c| c.id.clone()).collect()
     };
     assert!(
-        commands.iter().all(|id| id.starts_with("rak-examples.open.")),
+        commands
+            .iter()
+            .all(|id| id.starts_with("rak-examples.open.")),
         "every command should be an example opener, got {commands:?}"
     );
     assert!(
-        commands.iter().any(|id| id == "rak-examples.open.hello.rak"),
+        commands
+            .iter()
+            .any(|id| id == "rak-examples.open.hello.rak"),
         "the hello example should be contributed"
     );
 
@@ -1103,7 +1134,8 @@ fn the_bundled_rak_examples_are_gone() {
         return;
     };
     assert!(
-        !repo.join("src")
+        !repo
+            .join("src")
             .join("extensions")
             .join("rak")
             .join("examples.ts")

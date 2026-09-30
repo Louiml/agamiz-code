@@ -167,7 +167,9 @@ pub fn build_env<'lua>(lua: &'lua Lua, ctx: ExtCtx) -> Result<Table<'lua>, Strin
         for pair in string_lib.clone().pairs::<Value, Value>() {
             let (key, value) = pair.map_err(|e| e.to_string())?;
             let keep = match &key {
-                Value::String(name) => !STRIPPED_STRING_MEMBERS.contains(&name.to_string_lossy().as_ref()),
+                Value::String(name) => {
+                    !STRIPPED_STRING_MEMBERS.contains(&name.to_string_lossy().as_ref())
+                }
                 // Metatable and array part are structural, not callable.
                 _ => true,
             };
@@ -201,7 +203,9 @@ pub fn build_env<'lua>(lua: &'lua Lua, ctx: ExtCtx) -> Result<Table<'lua>, Strin
     }
     let loaded = lua.create_table().map_err(|e| e.to_string())?;
     handlers.set("loaded", loaded).map_err(|e| e.to_string())?;
-    handlers.set("env", env.clone()).map_err(|e| e.to_string())?;
+    handlers
+        .set("env", env.clone())
+        .map_err(|e| e.to_string())?;
     lua.globals()
         .set(HANDLERS_GLOBAL, handlers)
         .map_err(|e| e.to_string())?;
@@ -423,7 +427,15 @@ mod tests {
     #[test]
     fn module_path_blocks_escape() {
         for bad in [
-            "..", "../secrets", "a..b", "a/../../b", "", "a\\b", "/abs", "C:evil", "a b",
+            "..",
+            "../secrets",
+            "a..b",
+            "a/../../b",
+            "",
+            "a\\b",
+            "/abs",
+            "C:evil",
+            "a b",
             "....//....//etc",
         ] {
             assert!(

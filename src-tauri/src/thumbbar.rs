@@ -20,12 +20,12 @@ use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Shell::{
-    ITaskbarList3, SetWindowSubclass, DefSubclassProc, SHGetStockIconInfo, SHSTOCKICONINFO,
-    SHGSI_ICON, SHGSI_SMALLICON, SIID_FOLDEROPEN, TaskbarList, THB_FLAGS, THB_ICON, THB_TOOLTIP,
-    THBF_ENABLED, THUMBBUTTON,
+    DefSubclassProc, ITaskbarList3, SHGetStockIconInfo, SetWindowSubclass, TaskbarList, SHGSI_ICON,
+    SHGSI_SMALLICON, SHSTOCKICONINFO, SIID_FOLDEROPEN, THBF_ENABLED, THB_FLAGS, THB_ICON,
+    THB_TOOLTIP, THUMBBUTTON,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    HICON, IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTSIZE, LR_SHARED, WM_COMMAND, LoadImageW,
+    LoadImageW, HICON, IDI_APPLICATION, IMAGE_ICON, LR_DEFAULTSIZE, LR_SHARED, WM_COMMAND,
 };
 
 /// Sent in `HIWORD(wParam)` of `WM_COMMAND` when a thumbnail-toolbar button is
@@ -258,14 +258,11 @@ fn handle_click(app: &AppHandle, target_hwnd: usize, command: u32) {
         CMD_OPEN_FOLDER => {
             // Route to the exact window whose button was clicked so only that
             // window switches workspace; fall back to broadcasting.
-            let target = app
-                .webview_windows()
-                .into_values()
-                .find(|w| {
-                    w.hwnd()
-                        .map(|h| h.0 as usize == target_hwnd)
-                        .unwrap_or(false)
-                });
+            let target = app.webview_windows().into_values().find(|w| {
+                w.hwnd()
+                    .map(|h| h.0 as usize == target_hwnd)
+                    .unwrap_or(false)
+            });
             if let Some(w) = target {
                 let _ = w.emit("thumbbar://open-folder", ());
             } else {

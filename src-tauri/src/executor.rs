@@ -163,7 +163,13 @@ fn exe_suffix() -> &'static str {
 /// Keep a user-controlled file stem from escaping the temp directory.
 fn sanitize(stem: &str) -> String {
     stem.chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -338,21 +344,27 @@ pub fn build_plan(
         // TypeScript has no single canonical runner, so pick the fastest one
         // installed and fall back through the ladder.
         "typescript" | "typescriptreact" => {
-            let (runner, runner_args, note) =
-                match first_installed(&["ts-node", "bun", "deno"], tools) {
-                    // ts-node/bun/deno all take a bare file path.
-                    Some((_, path)) => (path, vec![file.to_string()], "Runs the TypeScript source directly.".to_string()),
-                    None => {
-                        // Node >= 22.6 strips types itself. Older versions need
-                        // the loader flag and still reject unsupported syntax,
-                        // so this fallback is explicitly degraded.
-                        (
+            let (runner, runner_args, note) = match first_installed(
+                &["ts-node", "bun", "deno"],
+                tools,
+            ) {
+                // ts-node/bun/deno all take a bare file path.
+                Some((_, path)) => (
+                    path,
+                    vec![file.to_string()],
+                    "Runs the TypeScript source directly.".to_string(),
+                ),
+                None => {
+                    // Node >= 22.6 strips types itself. Older versions need
+                    // the loader flag and still reject unsupported syntax,
+                    // so this fallback is explicitly degraded.
+                    (
                             interpreter::resolve_tool("node", tools),
                             vec!["--experimental-strip-types".to_string(), file.to_string()],
                             "No ts-node/bun/deno found — falling back to Node type stripping (needs Node 22.6+).".to_string(),
                         )
-                    }
-                };
+                }
+            };
 
             steps.push(step(
                 runner,
@@ -363,7 +375,15 @@ pub fn build_plan(
                 "run",
                 "Run",
             ));
-            desc = descriptor(language, "script", true, true, "node-inspector", "node", &note);
+            desc = descriptor(
+                language,
+                "script",
+                true,
+                true,
+                "node-inspector",
+                "node",
+                &note,
+            );
         }
 
         "go" => {
@@ -399,7 +419,15 @@ pub fn build_plan(
                 "run",
                 "Run",
             ));
-            desc = descriptor(language, "script", true, false, "", "php", "Runs via `php`.");
+            desc = descriptor(
+                language,
+                "script",
+                true,
+                false,
+                "",
+                "php",
+                "Runs via `php`.",
+            );
         }
 
         "ruby" => {
@@ -413,7 +441,15 @@ pub fn build_plan(
                 "run",
                 "Run",
             ));
-            desc = descriptor(language, "script", true, false, "", "ruby", "Runs via `ruby`.");
+            desc = descriptor(
+                language,
+                "script",
+                true,
+                false,
+                "",
+                "ruby",
+                "Runs via `ruby`.",
+            );
         }
 
         // ---- Compiled: build step, then execute the artifact. ---------------
@@ -683,7 +719,14 @@ pub fn describe_target(
 // Session execution
 // ---------------------------------------------------------------------------
 
-fn emit_line(app: &AppHandle, session: u64, step_index: u32, role: &str, stream: &str, text: String) {
+fn emit_line(
+    app: &AppHandle,
+    session: u64,
+    step_index: u32,
+    role: &str,
+    stream: &str,
+    text: String,
+) {
     let _ = app.emit(
         "run-output",
         RunLine {
@@ -799,7 +842,14 @@ fn drive(app: AppHandle, session: u64, steps: Vec<RunStep>, cwd: String) {
             let mut child = match spawn_step(step_def, &cwd, is_last) {
                 Ok(child) => child,
                 Err(message) => {
-                    emit_line(&app, session, index as u32, "error", "stderr", message.clone());
+                    emit_line(
+                        &app,
+                        session,
+                        index as u32,
+                        "error",
+                        "stderr",
+                        message.clone(),
+                    );
                     emit_finished(&app, session, -1, false, Some(message));
                     return;
                 }
@@ -901,10 +951,7 @@ pub fn run_target(
                 let s = step(explicit.clone(), argv.clone(), "run", "Run");
                 preview_of(std::slice::from_ref(&s))
             };
-            (
-                vec![step(explicit, argv, "run", "Run")],
-                desc,
-            )
+            (vec![step(explicit, argv, "run", "Run")], desc)
         }
         None => {
             let plan = build_plan(&file, &tools, &args)?;

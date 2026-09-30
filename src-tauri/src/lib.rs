@@ -19,8 +19,8 @@ mod terminal;
 
 // Lua extension framework: manifest validation, the sandboxed mlua host, the
 // `agamiz` API, and the installer that populates `~/.agamizcode/extensions`.
-mod ext;
 pub mod cli;
+mod ext;
 
 #[cfg(test)]
 mod project_tests;
@@ -105,20 +105,35 @@ fn window_label(n: u64) -> String {
 }
 
 fn rakc_binary() -> Option<String> {
-    let ext = if cfg!(target_os = "windows") { ".exe" } else { "" };
+    let ext = if cfg!(target_os = "windows") {
+        ".exe"
+    } else {
+        ""
+    };
     let mut candidates = vec!["rakc".to_string()];
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
             candidates.push(parent.join("rakc").to_string_lossy().to_string());
-            candidates.push(parent.join(format!("rakc{}", ext)).to_string_lossy().to_string());
+            candidates.push(
+                parent
+                    .join(format!("rakc{}", ext))
+                    .to_string_lossy()
+                    .to_string(),
+            );
         }
     }
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join(format!("../../target/release/rakc{}", ext))
-        .to_string_lossy().to_string());
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join(format!("../../target/debug/rakc{}", ext))
-        .to_string_lossy().to_string());
+    candidates.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(format!("../../target/release/rakc{}", ext))
+            .to_string_lossy()
+            .to_string(),
+    );
+    candidates.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(format!("../../target/debug/rakc{}", ext))
+            .to_string_lossy()
+            .to_string(),
+    );
     candidates.into_iter().find(|c| {
         Command::new(c)
             .arg("--version")
@@ -180,7 +195,13 @@ fn run_rak(app: AppHandle, mode: String, source: String) -> Result<(), String> {
             // a full disk) would make `flatten()` spin forever on the same error
             // instead of ending the stream.
             for line in BufReader::new(out).lines().map_while(Result::ok) {
-                let _ = app2.emit("rak-output", RakLine { stream: "stdout".into(), text: line });
+                let _ = app2.emit(
+                    "rak-output",
+                    RakLine {
+                        stream: "stdout".into(),
+                        text: line,
+                    },
+                );
             }
         });
     }
@@ -188,7 +209,13 @@ fn run_rak(app: AppHandle, mode: String, source: String) -> Result<(), String> {
         let app2 = app.clone();
         std::thread::spawn(move || {
             for line in BufReader::new(err).lines().map_while(Result::ok) {
-                let _ = app2.emit("rak-output", RakLine { stream: "stderr".into(), text: line });
+                let _ = app2.emit(
+                    "rak-output",
+                    RakLine {
+                        stream: "stderr".into(),
+                        text: line,
+                    },
+                );
             }
         });
     }
@@ -200,9 +227,15 @@ fn run_rak(app: AppHandle, mode: String, source: String) -> Result<(), String> {
             let mut guard = RUNNING.lock().unwrap();
             match guard.as_mut() {
                 Some(child) => match child.try_wait() {
-                    Ok(Some(_)) => { *guard = None; true }
+                    Ok(Some(_)) => {
+                        *guard = None;
+                        true
+                    }
                     Ok(None) => false,
-                    Err(_) => { *guard = None; true }
+                    Err(_) => {
+                        *guard = None;
+                        true
+                    }
                 },
                 None => true,
             }
@@ -251,13 +284,7 @@ fn find_on_path(program: &str) -> bool {
 #[cfg(target_os = "windows")]
 fn wsl_available() -> bool {
     match Command::new("wsl").args(["--list", "--quiet"]).output() {
-        Ok(o) => {
-            o.status.success()
-                && o
-                    .stdout
-                    .iter()
-                    .any(|b| !b.is_ascii_whitespace() && *b != 0)
-        }
+        Ok(o) => o.status.success() && o.stdout.iter().any(|b| !b.is_ascii_whitespace() && *b != 0),
         Err(_) => false,
     }
 }
@@ -472,7 +499,11 @@ fn list_files_recursive(path: String, ext: String) -> Result<Vec<FileEntry>, Str
             for entry in read_dir.flatten() {
                 if let Ok(metadata) = entry.metadata() {
                     let name = entry.file_name().to_string_lossy().to_string();
-                    if name.starts_with('.') || name == "node_modules" || name == "target" || name == "out" {
+                    if name.starts_with('.')
+                        || name == "node_modules"
+                        || name == "target"
+                        || name == "out"
+                    {
                         continue;
                     }
                     let path = entry.path();
@@ -835,11 +866,7 @@ fn inspect_project(root: String, files: Vec<ProjectFile>) -> Result<Vec<PathStat
 /// is written, so a template with one bad path cannot leave a half-built tree
 /// behind.
 #[tauri::command]
-fn create_project(
-    root: String,
-    files: Vec<ProjectFile>,
-    overwrite: bool,
-) -> Result<(), String> {
+fn create_project(root: String, files: Vec<ProjectFile>, overwrite: bool) -> Result<(), String> {
     let base = PathBuf::from(&root);
 
     // Resolve everything first: a path-escape or an unconfirmed overwrite must
@@ -897,9 +924,18 @@ fn rename_file(old_path: String, new_path: String) -> Result<(), String> {
 #[tauri::command]
 fn duplicate_file(src: String) -> Result<(), String> {
     let src_path = confine(&src)?;
-    let stem = src_path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-    let ext = src_path.extension().map(|s| format!(".{}", s.to_string_lossy())).unwrap_or_default();
-    let parent = src_path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let stem = src_path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let ext = src_path
+        .extension()
+        .map(|s| format!(".{}", s.to_string_lossy()))
+        .unwrap_or_default();
+    let parent = src_path
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_default();
     let mut dst = parent.join(format!("{}_copy{}", stem, ext));
     let mut i = 2;
     while dst.exists() {
@@ -919,15 +955,24 @@ fn open_in_explorer(path: String) -> Result<(), String> {
     let path = resolved.to_string_lossy().to_string();
     #[cfg(target_os = "windows")]
     {
-        Command::new("explorer.exe").arg(&path).spawn().map_err(|e| e.to_string())?;
+        Command::new("explorer.exe")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
     }
     #[cfg(target_os = "macos")]
     {
-        Command::new("open").arg(&path).spawn().map_err(|e| e.to_string())?;
+        Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
     }
     #[cfg(target_os = "linux")]
     {
-        Command::new("xdg-open").arg(&path).spawn().map_err(|e| e.to_string())?;
+        Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -956,27 +1001,33 @@ fn exec_result(args: Vec<String>, cwd: String) -> Result<ExecResult, String> {
     })
 }
 
-fn forward_proc_output(
-    app: AppHandle,
-    id: u64,
-    reader: std::process::ChildStdout,
-) {
+fn forward_proc_output(app: AppHandle, id: u64, reader: std::process::ChildStdout) {
     std::thread::spawn(move || {
         // `map_while(Result::ok)`, not `flatten()`: see `run_rak` above.
         for line in BufReader::new(reader).lines().map_while(Result::ok) {
-            let _ = app.emit("proc-output", ProcLine { id, stream: "stdout".into(), text: line });
+            let _ = app.emit(
+                "proc-output",
+                ProcLine {
+                    id,
+                    stream: "stdout".into(),
+                    text: line,
+                },
+            );
         }
     });
 }
 
-fn forward_proc_error(
-    app: AppHandle,
-    id: u64,
-    reader: std::process::ChildStderr,
-) {
+fn forward_proc_error(app: AppHandle, id: u64, reader: std::process::ChildStderr) {
     std::thread::spawn(move || {
         for line in BufReader::new(reader).lines().map_while(Result::ok) {
-            let _ = app.emit("proc-output", ProcLine { id, stream: "stderr".into(), text: line });
+            let _ = app.emit(
+                "proc-output",
+                ProcLine {
+                    id,
+                    stream: "stderr".into(),
+                    text: line,
+                },
+            );
         }
     });
 }
@@ -1013,7 +1064,7 @@ fn wait_proc(app: AppHandle, id: u64) {
         }
     });
 }
-        /// Spawn a long-running program (interactive run / debug target). Writes go to
+/// Spawn a long-running program (interactive run / debug target). Writes go to
 /// `proc-output`, completion to `proc-done`. The caller supplies `id` so it can
 /// correlate output; stdin is available via `proc_write`.
 #[tauri::command]
@@ -1129,12 +1180,26 @@ fn node_inspect(
                 } else {
                     let text = line.trim_end().to_string();
                     if !text.is_empty() {
-                        let _ = app.emit("proc-output", ProcLine { id, stream: "stderr".into(), text });
+                        let _ = app.emit(
+                            "proc-output",
+                            ProcLine {
+                                id,
+                                stream: "stderr".into(),
+                                text,
+                            },
+                        );
                     }
                 }
             } else if !line.trim().is_empty() {
                 let text = line.trim_end().to_string();
-                let _ = app.emit("proc-output", ProcLine { id, stream: "stderr".into(), text });
+                let _ = app.emit(
+                    "proc-output",
+                    ProcLine {
+                        id,
+                        stream: "stderr".into(),
+                        text,
+                    },
+                );
             }
             buffer.clear();
         }
@@ -1242,7 +1307,9 @@ fn lsp_send(json: String) -> Result<(), String> {
             stdin
                 .write_all(header.as_bytes())
                 .map_err(|e| e.to_string())?;
-            stdin.write_all(json.as_bytes()).map_err(|e| e.to_string())?;
+            stdin
+                .write_all(json.as_bytes())
+                .map_err(|e| e.to_string())?;
             stdin.flush().map_err(|e| e.to_string())?;
             Ok(())
         }
@@ -1384,26 +1451,27 @@ pub(crate) fn spawn_editor_window(app: &AppHandle) -> Result<String, String> {
     x += CASCADE_STEP.0;
     y += CASCADE_STEP.1;
 
-    let window = tauri::WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
-        .title("Agamiz Code")
-        .inner_size(1280.0, 800.0)
-        .min_inner_size(800.0, 600.0)
-        .resizable(true)
-        .decorations(false)
-        // `main` disables drag-drop because the custom title bar implements its
-        // own window dragging; match it so the two windows behave identically.
-        .disable_drag_drop_handler()
-        .background_color(tauri::window::Color(
-            WINDOW_BACKGROUND.0,
-            WINDOW_BACKGROUND.1,
-            WINDOW_BACKGROUND.2,
-            0xff,
-        ))
-        .position(x, y)
-        .visible(true)
-        .focused(true)
-        .build()
-        .map_err(|e| format!("{label}: {e}"))?;
+    let window =
+        tauri::WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+            .title("Agamiz Code")
+            .inner_size(1280.0, 800.0)
+            .min_inner_size(800.0, 600.0)
+            .resizable(true)
+            .decorations(false)
+            // `main` disables drag-drop because the custom title bar implements its
+            // own window dragging; match it so the two windows behave identically.
+            .disable_drag_drop_handler()
+            .background_color(tauri::window::Color(
+                WINDOW_BACKGROUND.0,
+                WINDOW_BACKGROUND.1,
+                WINDOW_BACKGROUND.2,
+                0xff,
+            ))
+            .position(x, y)
+            .visible(true)
+            .focused(true)
+            .build()
+            .map_err(|e| format!("{label}: {e}"))?;
 
     // Belt and braces: the creation-time focus hint is advisory, and a window
     // that opens behind its parent reads as "nothing happened".
@@ -1569,34 +1637,75 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            run_rak, stop_rak, rakc_version,
-            list_shells, proc_kill,
-            save_file, read_file, path_info, list_dir, list_files_recursive, current_dir,
-            create_file, create_dir, delete_file, user_config_dir,
-            register_workspace_root, register_allowed_root,
-            home_dir, inspect_project, create_project,
-            rename_file, duplicate_file, open_in_explorer,
-            exec_result, spawn_program, proc_write, proc_stop, node_inspect,
-            lsp_start, lsp_send, lsp_stop,
-            terminal::pty_profiles, terminal::pty_spawn, terminal::pty_write,
-            terminal::pty_resize, terminal::pty_kill,
-            new_window, add_recent,
+            run_rak,
+            stop_rak,
+            rakc_version,
+            list_shells,
+            proc_kill,
+            save_file,
+            read_file,
+            path_info,
+            list_dir,
+            list_files_recursive,
+            current_dir,
+            create_file,
+            create_dir,
+            delete_file,
+            user_config_dir,
+            register_workspace_root,
+            register_allowed_root,
+            home_dir,
+            inspect_project,
+            create_project,
+            rename_file,
+            duplicate_file,
+            open_in_explorer,
+            exec_result,
+            spawn_program,
+            proc_write,
+            proc_stop,
+            node_inspect,
+            lsp_start,
+            lsp_send,
+            lsp_stop,
+            terminal::pty_profiles,
+            terminal::pty_spawn,
+            terminal::pty_write,
+            terminal::pty_resize,
+            terminal::pty_kill,
+            new_window,
+            add_recent,
             // Polyglot run/debug: interpreter discovery, routed execution, DAP.
-            interpreter::detect_interpreters, interpreter::probe_interpreter,
-            executor::describe_target, executor::run_target,
-            executor::run_write, executor::run_stop,
-            dap::list_debug_adapters, dap::select_debug_adapter,
-            dap::dap_start, dap::dap_send, dap::dap_stop, dap::dap_alive,
+            interpreter::detect_interpreters,
+            interpreter::probe_interpreter,
+            executor::describe_target,
+            executor::run_target,
+            executor::run_write,
+            executor::run_stop,
+            dap::list_debug_adapters,
+            dap::select_debug_adapter,
+            dap::dap_start,
+            dap::dap_send,
+            dap::dap_stop,
+            dap::dap_alive,
             // Lua extension framework.
-            ext::commands::ext_list, ext::commands::ext_registry,
-            ext::commands::ext_root, ext::commands::ext_open_folder,
-            ext::commands::ext_set_enabled, ext::commands::ext_reload,
-            ext::commands::ext_deactivate_all, ext::commands::ext_run_command,
-            ext::commands::ext_install_folder, ext::commands::ext_install_zip,
-            ext::commands::ext_install_git, ext::commands::ext_install_dev,
+            ext::commands::ext_list,
+            ext::commands::ext_registry,
+            ext::commands::ext_root,
+            ext::commands::ext_open_folder,
+            ext::commands::ext_set_enabled,
+            ext::commands::ext_reload,
+            ext::commands::ext_deactivate_all,
+            ext::commands::ext_run_command,
+            ext::commands::ext_install_folder,
+            ext::commands::ext_install_zip,
+            ext::commands::ext_install_git,
+            ext::commands::ext_install_dev,
             ext::commands::ext_uninstall,
-            ext::commands::ext_sync_workspace, ext::commands::ext_emit_event,
-            ext::commands::ext_broadcast_event, ext::commands::ext_notify_save,
+            ext::commands::ext_sync_workspace,
+            ext::commands::ext_emit_event,
+            ext::commands::ext_broadcast_event,
+            ext::commands::ext_notify_save,
             ext::commands::ext_activate_for
         ])
         .manage(terminal::PtyRegistry::new())
@@ -1616,7 +1725,8 @@ mod confine_tests {
 
     impl Fixture {
         fn new(tag: &str) -> Self {
-            let base = std::env::temp_dir().join(format!("agamiz-confine-{tag}-{}", std::process::id()));
+            let base =
+                std::env::temp_dir().join(format!("agamiz-confine-{tag}-{}", std::process::id()));
             let _ = fs::remove_dir_all(&base);
             let root = base.join("workspace");
             let outside = base.join("elsewhere");
@@ -1804,13 +1914,22 @@ mod window_tests {
         let mut sorted = labels.clone();
         sorted.sort();
         sorted.dedup();
-        assert_eq!(sorted.len(), labels.len(), "labels must be unique: {labels:?}");
+        assert_eq!(
+            sorted.len(),
+            labels.len(),
+            "labels must be unique: {labels:?}"
+        );
         // Glob-compatible: the `*` in `editor-*` has to be able to swallow the
         // counter, so the prefix must not itself contain a separator.
-        assert!(!WINDOW_LABEL_PREFIX.contains('-'), "prefix must be a single segment");
+        assert!(
+            !WINDOW_LABEL_PREFIX.contains('-'),
+            "prefix must be a single segment"
+        );
         for label in &labels {
-            assert!(label.starts_with(&format!("{WINDOW_LABEL_PREFIX}-")), "{label}");
+            assert!(
+                label.starts_with(&format!("{WINDOW_LABEL_PREFIX}-")),
+                "{label}"
+            );
         }
     }
 }
-

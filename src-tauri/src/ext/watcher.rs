@@ -43,8 +43,8 @@ pub fn start(app: tauri::AppHandle, host: Arc<ExtensionHost>) {
 
     let (tx, rx) = channel::<PathBuf>();
 
-    let mut watcher: notify::RecommendedWatcher = match notify::recommended_watcher(
-        move |event: notify::Result<notify::Event>| {
+    let mut watcher: notify::RecommendedWatcher =
+        match notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
             let Ok(event) = event else { return };
             if !matches!(
                 event.kind,
@@ -62,14 +62,13 @@ pub fn start(app: tauri::AppHandle, host: Arc<ExtensionHost>) {
             if !is_noise(path) {
                 let _ = tx.send(path.to_path_buf());
             }
-        },
-    ) {
-        Ok(watcher) => watcher,
-        Err(e) => {
-            log::warn!("[ext] hot reload unavailable: {e}");
-            return;
-        }
-    };
+        }) {
+            Ok(watcher) => watcher,
+            Err(e) => {
+                log::warn!("[ext] hot reload unavailable: {e}");
+                return;
+            }
+        };
 
     if let Err(e) = watcher.watch(&dev_root, RecursiveMode::Recursive) {
         log::warn!("[ext] could not watch {}: {e}", dev_root.display());

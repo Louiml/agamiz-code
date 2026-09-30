@@ -206,7 +206,10 @@ impl Registry {
 
     /// Record an id as owned, replacing any previous entry for that kind.
     fn own(&mut self, extension_id: &str, slot: fn(&mut OwnedIds) -> &mut Vec<String>, id: String) {
-        let entry = self.by_extension.entry(extension_id.to_string()).or_default();
+        let entry = self
+            .by_extension
+            .entry(extension_id.to_string())
+            .or_default();
         let list = slot(entry);
         // Re-registering the same id must not duplicate it, or `revoke` would
         // try to remove it twice (harmless, but the list would grow on every
@@ -244,9 +247,7 @@ pub struct TextPosition {
     pub character: u32,
 }
 
-#[derive(
-    Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord,
-)]
+#[derive(Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TextRange {
     pub start: TextPosition,
     pub end: TextPosition,

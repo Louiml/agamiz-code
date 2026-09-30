@@ -484,7 +484,10 @@ fn detect_wsl() -> Vec<InterpreterInfo> {
 
     let mut script = String::new();
     for binary in ["python3", "node", "go"] {
-        if probe.lines().any(|line| line.trim() == format!("/usr/bin/{binary}")) {
+        if probe
+            .lines()
+            .any(|line| line.trim() == format!("/usr/bin/{binary}"))
+        {
             script.push_str(&format!("{binary} --version 2>/dev/null | head -1;"));
         }
     }
@@ -498,7 +501,10 @@ fn detect_wsl() -> Vec<InterpreterInfo> {
     let mut lines = versions.lines();
 
     for binary in ["python3", "node", "go"] {
-        if !probe.lines().any(|line| line.trim() == format!("/usr/bin/{binary}")) {
+        if !probe
+            .lines()
+            .any(|line| line.trim() == format!("/usr/bin/{binary}"))
+        {
             continue;
         }
         let Some(line) = lines.next() else { break };
@@ -606,10 +612,10 @@ pub fn probe_interpreter(path: String) -> Result<InterpreterInfo, String> {
     // and to label the tool correctly (a custom venv python still reads
     // "Python 3.12.1", not "python.exe").
     let matched = SPECS.iter().find(|spec| {
-        spec.programs
-            .iter()
-            .any(|program| exe_name.eq_ignore_ascii_case(program)
-                || exe_name.eq_ignore_ascii_case(&format!("{program}.exe")))
+        spec.programs.iter().any(|program| {
+            exe_name.eq_ignore_ascii_case(program)
+                || exe_name.eq_ignore_ascii_case(&format!("{program}.exe"))
+        })
     });
 
     let version = matched

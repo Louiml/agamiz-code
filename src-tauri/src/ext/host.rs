@@ -18,7 +18,7 @@ use mlua::{Function, Lua, LuaSerdeExt, MultiValue, Table, Value};
 
 use crate::ext::manifest::load_manifest;
 use crate::ext::sandbox;
-use crate::ext::{ExtensionHost, ExtensionRecord, ExtensionManifest};
+use crate::ext::{ExtensionHost, ExtensionManifest, ExtensionRecord};
 
 /// Sub-folder of the install root whose contents are watched and hot-reloaded.
 pub const DEV_DIR: &str = "dev";
@@ -49,8 +49,13 @@ pub fn discover(host: &ExtensionHost) -> Vec<ExtensionRecord> {
         let (record, error) = match load_manifest(&dir) {
             Ok(manifest) => (build_record(host, &manifest, &dir, source, None), None),
             Err(e) => {
-                let record =
-                    build_record(host, &fallback_manifest(&name), &dir, source, Some(e.clone()));
+                let record = build_record(
+                    host,
+                    &fallback_manifest(&name),
+                    &dir,
+                    source,
+                    Some(e.clone()),
+                );
                 (record, Some(e))
             }
         };
@@ -205,9 +210,10 @@ pub fn locate(host: &ExtensionHost, id: &str) -> Option<PathBuf> {
 
 /// Whether `event` is one of `manifest`'s activation events.
 pub fn matches_activation(manifest: &ExtensionManifest, event: &str) -> bool {
-    manifest.activation_events.iter().any(|declared| {
-        declared == event || declared == "*" && matches!(event, "onStartup")
-    })
+    manifest
+        .activation_events
+        .iter()
+        .any(|declared| declared == event || declared == "*" && matches!(event, "onStartup"))
 }
 
 /// True when the extension wants to be running as soon as the IDE starts.
@@ -301,8 +307,10 @@ pub fn activate(
         // of contributed metadata with no lifecycle at all.
         if let Ok(Value::Function(activate_fn)) = env.get::<_, Value>("activate") {
             let context = build_context(&lua, &ctx).map_err(|e| e.to_string())?;
-            guard("running activate()", || activate_fn.call::<_, MultiValue>(context))
-                .map_err(|e| format!("activate() failed: {e}"))?;
+            guard("running activate()", || {
+                activate_fn.call::<_, MultiValue>(context)
+            })
+            .map_err(|e| format!("activate() failed: {e}"))?;
         }
     }
 
@@ -431,7 +439,11 @@ impl ExtensionHost {
 ///
 /// The callback is looked up inside the extension's own VM, so a command id can
 /// never reach across extension boundaries, and the whole call is guarded.
-pub fn run_command(host: &ExtensionHost, command_id: &str, args: Vec<String>) -> Result<(), String> {
+pub fn run_command(
+    host: &ExtensionHost,
+    command_id: &str,
+    args: Vec<String>,
+) -> Result<(), String> {
     let extension_id = {
         let registry = host.registry.lock().map_err(|_| "registry lock poisoned")?;
         registry
@@ -449,7 +461,10 @@ pub fn run_command(host: &ExtensionHost, command_id: &str, args: Vec<String>) ->
 
     let vm = {
         let vms = host.vms.lock().map_err(|_| "VM map lock poisoned")?;
-        Arc::clone(vms.get(&extension_id).ok_or("extension is no longer active")?)
+        Arc::clone(
+            vms.get(&extension_id)
+                .ok_or("extension is no longer active")?,
+        )
     };
     let lua = vm.lock().map_err(|_| "VM lock poisoned".to_string())?;
 

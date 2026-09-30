@@ -16,9 +16,11 @@ use std::path::{Path, PathBuf};
 
 use mlua::{Lua, Table, Value};
 
-use crate::ext::sandbox::ExtCtx;
-use crate::ext::{CommandRecord, PanelRecord, ProjectTemplateFile, ProjectTemplateRecord, StatusRecord};
 use crate::ext::events;
+use crate::ext::sandbox::ExtCtx;
+use crate::ext::{
+    CommandRecord, PanelRecord, ProjectTemplateFile, ProjectTemplateRecord, StatusRecord,
+};
 
 /// Install `agamiz` into the sandbox environment.
 pub fn install(lua: &Lua, env: &Table, ctx: ExtCtx) -> Result<(), String> {
@@ -72,7 +74,11 @@ fn install_meta(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> {
 }
 
 fn install_logging(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> {
-    for (name, level) in [("log", "info"), ("log_warn", "warning"), ("log_error", "error")] {
+    for (name, level) in [
+        ("log", "info"),
+        ("log_warn", "warning"),
+        ("log_error", "error"),
+    ] {
         let c = ctx.clone();
         let log_fn = lua
             .create_function(move |lua, args: mlua::Variadic<Value>| {
@@ -100,8 +106,8 @@ fn install_commands(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> 
     let register_ctx = ctx.clone();
     let register = lua
         .create_function(move |lua, args: mlua::Variadic<Value>| {
-            let (id, opts, callback) = parse_register_args(lua, args)
-                .map_err(mlua::Error::external)?;
+            let (id, opts, callback) =
+                parse_register_args(lua, args).map_err(mlua::Error::external)?;
 
             let handlers = crate::ext::sandbox::handlers(lua)?;
             let table: Table = handlers.get("commands")?;
@@ -142,8 +148,7 @@ fn install_commands(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> 
     commands
         .set("register", register)
         .map_err(|e| e.to_string())?;
-    api.set("commands", commands)
-        .map_err(|e| e.to_string())?;
+    api.set("commands", commands).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -362,8 +367,7 @@ fn install_window(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> {
     let show_ctx = ctx.clone();
     let show = lua
         .create_function(move |_, (level, message): (String, String)| {
-            show_ctx
-                .require("ui:notification", "agamiz.window.show_message")?;
+            show_ctx.require("ui:notification", "agamiz.window.show_message")?;
             show_ctx.notice(&normalize_level(&level), &message);
             Ok(())
         })
@@ -375,8 +379,7 @@ fn install_window(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> {
     let error_ctx = ctx.clone();
     let show_error = lua
         .create_function(move |_, message: String| {
-            error_ctx
-                .require("ui:notification", "agamiz.window.show_error")?;
+            error_ctx.require("ui:notification", "agamiz.window.show_error")?;
             error_ctx.notice("error", &message);
             Ok(())
         })
@@ -468,8 +471,7 @@ fn install_status_bar(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String
     let remove_ctx = ctx.clone();
     let remove_item = lua
         .create_function(move |_, id: String| {
-            remove_ctx
-                .require("ui:statusbar", "agamiz.statusbar.remove_item")?;
+            remove_ctx.require("ui:statusbar", "agamiz.statusbar.remove_item")?;
             let key = format!("{}:{id}", remove_ctx.id);
             if let Ok(mut registry) = remove_ctx.registry.lock() {
                 registry.status.remove(&key);
@@ -486,8 +488,7 @@ fn install_status_bar(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String
         .set("remove_item", remove_item)
         .map_err(|e| e.to_string())?;
 
-    api.set("statusbar", statusbar)
-        .map_err(|e| e.to_string())?;
+    api.set("statusbar", statusbar).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -522,14 +523,13 @@ fn install_projects(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> 
             register_ctx.require("fs:write", "agamiz.projects.register")?;
 
             let mut iter = args.into_iter();
-            let id = match iter.next() {
-                Some(Value::String(s)) => s.to_string_lossy().to_string(),
-                _ => {
-                    return Err(mlua::Error::external(
+            let id =
+                match iter.next() {
+                    Some(Value::String(s)) => s.to_string_lossy().to_string(),
+                    _ => return Err(mlua::Error::external(
                         "agamiz.projects.register: first argument must be the template id string",
-                    ))
-                }
-            };
+                    )),
+                };
             if id.trim().is_empty() {
                 return Err(mlua::Error::external(
                     "agamiz.projects.register: template id must not be empty",
@@ -548,7 +548,9 @@ fn install_projects(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> 
             let name = opts
                 .get::<_, Option<String>>("name")?
                 .unwrap_or_else(|| humanize_command_id(&id));
-            let description = opts.get::<_, Option<String>>("description")?.unwrap_or_default();
+            let description = opts
+                .get::<_, Option<String>>("description")?
+                .unwrap_or_default();
             let icon = opts.get::<_, Option<String>>("icon")?;
             let create_command = opts.get::<_, Option<String>>("createCommand")?;
             let install_command = opts.get::<_, Option<String>>("installCommand")?;
@@ -576,7 +578,9 @@ fn install_projects(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> 
                         }
                     };
                     let path = file.get::<_, String>("path")?;
-                    let content = file.get::<_, Option<String>>("content")?.unwrap_or_default();
+                    let content = file
+                        .get::<_, Option<String>>("content")?
+                        .unwrap_or_default();
                     files.push(ProjectTemplateFile { path, content });
                 }
             }
@@ -670,9 +674,10 @@ fn install_projects(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> 
         })
         .map_err(|e| e.to_string())?;
 
-    projects.set("register", register).map_err(|e| e.to_string())?;
-    api.set("projects", projects)
+    projects
+        .set("register", register)
         .map_err(|e| e.to_string())?;
+    api.set("projects", projects).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -724,8 +729,7 @@ fn install_workspace(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String>
     let save_ctx = ctx.clone();
     let on_save = lua
         .create_function(move |lua, callback: mlua::Function| {
-            save_ctx
-                .require("workspace:read", "agamiz.workspace.on_did_save_file")?;
+            save_ctx.require("workspace:read", "agamiz.workspace.on_did_save_file")?;
             let handlers = crate::ext::sandbox::handlers(lua)?;
             let bucket: Table = handlers.get("workspace")?;
             bucket.set("on_did_save_file", callback)?;
@@ -747,8 +751,7 @@ fn install_workspace(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String>
         .set("on_did_save_file", on_save)
         .map_err(|e| e.to_string())?;
 
-    api.set("workspace", workspace)
-        .map_err(|e| e.to_string())?;
+    api.set("workspace", workspace).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -759,8 +762,7 @@ fn install_ui(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> {
     let panel_ctx = ctx.clone();
     let register = lua
         .create_function(move |_, args: mlua::Variadic<Value>| {
-            panel_ctx
-                .require("ui:sidebar", "agamiz.ui.register_sidebar_panel")?;
+            panel_ctx.require("ui:sidebar", "agamiz.ui.register_sidebar_panel")?;
             let mut iter = args.into_iter();
             let id = match iter.next() {
                 Some(Value::String(s)) => s.to_string_lossy().to_string(),
@@ -787,9 +789,7 @@ fn install_ui(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> {
                 None => None,
             };
             let body = match config.as_ref() {
-                Some(cfg) => cfg
-                    .get::<_, Option<String>>("body")?
-                    .unwrap_or_default(),
+                Some(cfg) => cfg.get::<_, Option<String>>("body")?.unwrap_or_default(),
                 None => String::new(),
             };
 
@@ -826,7 +826,9 @@ fn install_events(lua: &Lua, api: &Table) -> Result<(), String> {
     let on = lua
         .create_function(move |lua, (event, callback): (String, mlua::Function)| {
             if event.trim().is_empty() {
-                return Err(mlua::Error::external("agamiz.on: event name must not be empty"));
+                return Err(mlua::Error::external(
+                    "agamiz.on: event name must not be empty",
+                ));
             }
             let handlers = crate::ext::sandbox::handlers(lua)?;
             let bucket: Table = handlers.get("events")?;
@@ -868,8 +870,7 @@ fn install_fs(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> {
     let read_own_ctx = ctx.clone();
     let read_own = lua
         .create_function(move |_, path: String| {
-            read_own_ctx
-                .require("fs:read", "agamiz.fs.read_extension_file")?;
+            read_own_ctx.require("fs:read", "agamiz.fs.read_extension_file")?;
             let resolved = read_own_ctx
                 .resolve_in_extension(&path)
                 .map_err(mlua::Error::external)?;
@@ -978,16 +979,20 @@ fn install_process(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> {
 
             let table = lua.create_table()?;
             table.set("code", output.status.code().unwrap_or(-1))?;
-            table.set("stdout", String::from_utf8_lossy(&output.stdout).to_string())?;
-            table.set("stderr", String::from_utf8_lossy(&output.stderr).to_string())?;
+            table.set(
+                "stdout",
+                String::from_utf8_lossy(&output.stdout).to_string(),
+            )?;
+            table.set(
+                "stderr",
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            )?;
             Ok(table)
-            },
-        )
+        })
         .map_err(|e| e.to_string())?;
     process.set("exec", exec).map_err(|e| e.to_string())?;
 
-    api.set("process", process)
-        .map_err(|e| e.to_string())?;
+    api.set("process", process).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -1033,7 +1038,10 @@ fn install_http(lua: &Lua, api: &Table, ctx: &ExtCtx) -> Result<(), String> {
 }
 
 /// Shape a `ureq` response into `{ status, body }`.
-fn finish_http(lua: &Lua, result: Result<ureq::http::Response<ureq::Body>, ureq::Error>) -> mlua::Result<Table<'_>> {
+fn finish_http(
+    lua: &Lua,
+    result: Result<ureq::http::Response<ureq::Body>, ureq::Error>,
+) -> mlua::Result<Table<'_>> {
     let table = lua.create_table()?;
     match result {
         Ok(mut response) => {
@@ -1139,11 +1147,14 @@ fn normalize_level(level: &str) -> String {
 impl ExtCtx {
     /// Emit a notification toast.
     pub fn notice(&self, level: &str, message: &str) {
-        self.emit(events::NOTICE, serde_json::json!({
-            "level": level,
-            "message": message,
-            "extensionId": self.id,
-        }));
+        self.emit(
+            events::NOTICE,
+            serde_json::json!({
+                "level": level,
+                "message": message,
+                "extensionId": self.id,
+            }),
+        );
     }
 
     /// Write a line to the output channel and the extension log.
@@ -1153,11 +1164,14 @@ impl ExtCtx {
 
     pub fn log_at(&self, level: &str, message: &str) {
         log::info!("[ext:{}] {}", self.id, message);
-        self.emit(events::LOG, serde_json::json!({
-            "extensionId": self.id,
-            "level": level,
-            "text": message,
-        }));
+        self.emit(
+            events::LOG,
+            serde_json::json!({
+                "extensionId": self.id,
+                "level": level,
+                "text": message,
+            }),
+        );
     }
 
     /// Ask the editor to perform a mutation. Fire-and-forget by design.
@@ -1166,27 +1180,33 @@ impl ExtCtx {
     /// position; `text` doubles as the buffer contents for `openBuffer`.
     /// `name` carries the suggested filename, which only `openBuffer` reads.
     pub fn editor_request(&self, action: &str, line: u32, character: u32, text: &str) {
-        self.emit(events::EDITOR, serde_json::json!({
-            "extensionId": self.id,
-            "action": action,
-            "line": line,
-            "character": character,
-            "text": text,
-        }));
+        self.emit(
+            events::EDITOR,
+            serde_json::json!({
+                "extensionId": self.id,
+                "action": action,
+                "line": line,
+                "character": character,
+                "text": text,
+            }),
+        );
     }
 
     /// Same as [`Self::editor_request`], plus a filename. Split out rather than
     /// always emitting an extra `name` field so the three positional mutations
     /// keep exactly the payload they always had.
     pub fn editor_request_named(&self, action: &str, text: &str, name: &str) {
-        self.emit(events::EDITOR, serde_json::json!({
-            "extensionId": self.id,
-            "action": action,
-            "line": 0,
-            "character": 0,
-            "text": text,
-            "name": name,
-        }));
+        self.emit(
+            events::EDITOR,
+            serde_json::json!({
+                "extensionId": self.id,
+                "action": action,
+                "line": 0,
+                "character": 0,
+                "text": text,
+                "name": name,
+            }),
+        );
     }
 
     /// Re-publish the contribution registry so the palette, status bar and
@@ -1295,7 +1315,10 @@ mod tests {
         // Accented: the character is 2 bytes, so a byte slice at the char index
         // would land mid-sequence. The camelCase word split still happens, which
         // is why `déjàVu` becomes "Déjà Vu" and not "DéjàVu".
-        assert_eq!(humanize_command_id("my.ext.d\u{e9}j\u{e0}Vu"), "D\u{e9}j\u{e0} Vu");
+        assert_eq!(
+            humanize_command_id("my.ext.d\u{e9}j\u{e0}Vu"),
+            "D\u{e9}j\u{e0} Vu"
+        );
         // Astral plane: a 4-byte character that is not a char boundary.
         assert_eq!(humanize_command_id("my.ext.\u{1F600}wave"), "\u{1F600}wave");
     }

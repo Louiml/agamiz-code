@@ -1,4 +1,4 @@
-﻿//! Tests for the project-scaffolding commands.
+//! Tests for the project-scaffolding commands.
 //!
 //! The subject is `resolve_template_path`, which is the only thing standing
 //! between a third-party extension template and the rest of the filesystem. The
@@ -49,7 +49,12 @@ fn absolute_and_drive_paths_are_rejected() {
     // Checked with explicit prefix/separator tests rather than
     // `Path::is_absolute`, which is platform-dependent: `/etc/passwd` is not
     // absolute on Windows, and this guard has to hold on every platform.
-    for evil in ["/etc/passwd", "\\windows\\system32", "C:\\Windows\\evil", "d:/evil"] {
+    for evil in [
+        "/etc/passwd",
+        "\\windows\\system32",
+        "C:\\Windows\\evil",
+        "d:/evil",
+    ] {
         assert!(
             resolve_template_path(&root, evil).is_err(),
             "{evil:?} must not be accepted as a relative template path"

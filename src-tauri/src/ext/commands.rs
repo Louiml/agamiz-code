@@ -196,7 +196,12 @@ pub fn ext_install_folder(
 ) -> Result<ExtensionRecord, String> {
     let root = ensure_root()?;
     let installed = install::install_from_folder(&root, std::path::Path::new(&path))?;
-    let _ = host::activate(&host, &installed.id, &installed.path, &manifest::load_manifest(&installed.path)?);
+    let _ = host::activate(
+        &host,
+        &installed.id,
+        &installed.path,
+        &manifest::load_manifest(&installed.path)?,
+    );
     publish(&app, &host);
     find_record(&app, &installed.id)
 }
@@ -209,7 +214,12 @@ pub fn ext_install_zip(
 ) -> Result<ExtensionRecord, String> {
     let root = ensure_root()?;
     let installed = install::install_from_zip(&root, std::path::Path::new(&path))?;
-    let _ = host::activate(&host, &installed.id, &installed.path, &manifest::load_manifest(&installed.path)?);
+    let _ = host::activate(
+        &host,
+        &installed.id,
+        &installed.path,
+        &manifest::load_manifest(&installed.path)?,
+    );
     publish(&app, &host);
     find_record(&app, &installed.id)
 }
@@ -223,7 +233,12 @@ pub fn ext_install_git(
 ) -> Result<ExtensionRecord, String> {
     let root = ensure_root()?;
     let installed = install::install_from_git(&root, &url, reference.as_deref())?;
-    let _ = host::activate(&host, &installed.id, &installed.path, &manifest::load_manifest(&installed.path)?);
+    let _ = host::activate(
+        &host,
+        &installed.id,
+        &installed.path,
+        &manifest::load_manifest(&installed.path)?,
+    );
     publish(&app, &host);
     find_record(&app, &installed.id)
 }
@@ -248,7 +263,8 @@ pub fn ext_install_dev(
     path: String,
 ) -> Result<ExtensionRecord, String> {
     let root = ensure_root()?;
-    let staged = install::install_from_folder(&root.join(host::DEV_DIR), std::path::Path::new(&path))?;
+    let staged =
+        install::install_from_folder(&root.join(host::DEV_DIR), std::path::Path::new(&path))?;
     let _ = host::activate(
         &host,
         &staged.id,

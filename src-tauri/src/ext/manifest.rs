@@ -288,9 +288,7 @@ fn has_leading_zero(part: &str) -> bool {
 fn is_dot_separated_identifier(value: &str, allow_leading_zero: bool) -> bool {
     value.split('.').all(|part| {
         !part.is_empty()
-            && part
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            && part.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
             && (allow_leading_zero || !has_leading_zero(part))
     })
 }
@@ -351,8 +349,8 @@ pub fn load_manifest(dir: &Path) -> Result<ExtensionManifest, String> {
     let raw = std::fs::read_to_string(&path)
         .map_err(|e| format!("could not read {}: {e}", path.display()))?;
 
-    let manifest: ExtensionManifest = serde_json::from_str(&raw)
-        .map_err(|e| format!("invalid {}: {e}", path.display()))?;
+    let manifest: ExtensionManifest =
+        serde_json::from_str(&raw).map_err(|e| format!("invalid {}: {e}", path.display()))?;
 
     manifest
         .validate()
@@ -429,10 +427,7 @@ mod tests {
                 "main": bad,
             });
             let m: ExtensionManifest = serde_json::from_value(value).unwrap();
-            assert!(
-                m.validate().is_err(),
-                "{bad:?} should be rejected"
-            );
+            assert!(m.validate().is_err(), "{bad:?} should be rejected");
         }
     }
 
