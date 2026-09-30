@@ -192,15 +192,38 @@ describe('auto-close', () => {
   });
 
   it('does not auto-close a closing bracket', () => {
-    // Typing `)` must never insert a pair — `autoCloseMap` has no entry for it.
-    // The complementary case (typing `)` *over* an auto-inserted `)`, which
-    // should just step the caret past it) is unobservable in jsdom until 1.3
-    // lands, because jsdom performs no native text insertion on keydown, so
-    // "nothing happened" and "type-over worked" are indistinguishable here.
-    // That test is added alongside the implementation.
     const { ta, onChange } = setup('()');
     placeCaret(ta, 1);
     fireEvent.keyDown(ta, { key: ')' });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('steps over an auto-inserted closer instead of doubling it', () => {
+    // The bug this pins: typing `(` produced `()`, then typing `)` produced
+    // `foo())` because the closer was inserted again. The type-over path
+    // changes no text at all, so the assertion is that onChange stays silent
+    // while the caret moves past the existing `)`.
+    const { ta, onChange } = setup('foo()');
+    placeCaret(ta, 4); // between the parens
+    fireEvent.keyDown(ta, { key: ')' });
+    expect(onChange).not.toHaveBeenCalled();
+    // The caret advanced over the closer, so the next keystroke appends.
+    expect(ta.selectionStart).toBe(5);
+  });
+
+  it('wraps a selection rather than replacing it', () => {
+    // Typing a quote over a selection used to destroy the selected text.
+    const { ta, onChange } = setup('abc');
+    ta.setSelectionRange(0, 3);
+    fireEvent.select(ta);
+    fireEvent.keyDown(ta, { key: '"' });
+    expect(onChange).toHaveBeenCalledWith('"abc"');
+  });
+
+  it('does not auto-close inside a comment', () => {
+    const { ta, onChange } = setup('// note');
+    placeCaret(ta, 5); // inside the comment
+    fireEvent.keyDown(ta, { key: '(' });
     expect(onChange).not.toHaveBeenCalled();
   });
 });

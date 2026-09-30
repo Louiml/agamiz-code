@@ -6,6 +6,7 @@ import { Icon, IconName } from './Icon';
 import { getSuggestions, Suggestion } from '../../languages/completion';
 import { EditorHistory } from '../features/editorHistory';
 import { indentBlock, outdentBlock } from '../features/indent';
+import { contextAt, decideAutoClose } from '../features/autoClose';
 import { lineAt, lineEndOffset, lineStartOffset, longestLine, normalizeBuffer, positionAt } from '../features/eol';
 import { RAK_KEYWORDS, RAK_TYPES } from '../../extensions/rak/language';
 
@@ -781,19 +782,67 @@ export default function CodeEditor({
       }
       return;
     }
-    // Auto-close brackets and quotes
-    const autoCloseMap: Record<string, string> = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'" };
-    if (autoClose && !mod && !e.altKey && autoCloseMap[e.key] && !e.key.startsWith('Arrow')) {
+    // Auto-close brackets and quotes.
+    //
+    // The decision lives in features/autoClose.ts because the rules are the
+    // fiddly part: step over a closer that is already there, wrap a selection
+    // rather than replacing it, and do nothing at all inside a string or a
+    // comment. The component only supplies the token context and applies the
+    // result.
+    if (!mod && !e.altKey && !e.key.startsWith('Arrow')) {
       const start = e.currentTarget.selectionStart;
       const end = e.currentTarget.selectionEnd;
-      if (start === end) {
+      const row = lineAt(buffer, start);
+      // The highlighter is stateful per line, so tokenizing just this line is
+      // both correct and cheap — no need for the whole buffer here.
+      const lineTokens = tokenizeLine(buffer.lines[row] ?? '');
+      const decision = decideAutoClose({
+        key: e.key,
+        text: buffer.text,
+        selectionStart: start,
+        selectionEnd: end,
+        context: contextAt(lineTokens, start - lineStartOffset(buffer, row)),
+        enabled: autoClose,
+      });
+
+      if (decision.kind === 'typeOver') {
+        // Nothing to insert — just step the caret past the closer that is
+        // already there, which is what stops `(` then `)` yielding `foo())`.
         e.preventDefault();
-        const insert = e.key + autoCloseMap[e.key];
-        commit(buffer.text.substring(0, start) + insert + buffer.text.substring(end), start, start + 1);
+        const at = start + decision.closer.length;
+        textareaRef.current?.setSelectionRange(at, at);
+        return;
+      }
+
+      if (decision.kind === 'insert') {
+        e.preventDefault();
+        commit(
+          buffer.text.substring(0, start) + decision.text + buffer.text.substring(end),
+          start,
+          start + 1,
+        );
         setTimeout(() => {
-          if (textareaRef.current) {
-            textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + 1;
-          }
+          textareaRef.current?.setSelectionRange(start + 1, start + 1);
+        }, 0);
+        return;
+      }
+
+      if (decision.kind === 'surround') {
+        // Typing a quote over a selection quotes it; the previous behaviour
+        // replaced the selection outright and lost the text.
+        e.preventDefault();
+        const selected = buffer.text.substring(start, end);
+        const wrapped = decision.before + selected + decision.after;
+        commit(
+          buffer.text.substring(0, start) + wrapped + buffer.text.substring(end),
+          start,
+          start + decision.before.length,
+        );
+        setTimeout(() => {
+          textareaRef.current?.setSelectionRange(
+            start + decision.before.length,
+            start + decision.before.length + selected.length,
+          );
         }, 0);
         return;
       }
