@@ -5,7 +5,11 @@ description = "Agamiz Code - A Tauri 2 + Next.js desktop IDE with an extensible 
 authors = ["Ryuzaki"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
-rust-version = "1.77.2"
+# The floor the code and its dependencies actually need. This was declared as
+# 1.77.2, which was never true: it made `cargo clippy` emit 24 `incompatible_msrv`
+# warnings for `let ... else` / inline-const items that have been stable since
+# 1.80, and the manifest could not build on the version it claimed to support.
+rust-version = "1.82"
 
 [lib]
 name = "app_lib"

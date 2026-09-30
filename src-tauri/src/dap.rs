@@ -327,7 +327,10 @@ pub fn dap_send(session: u64, json: String) -> Result<(), String> {
     let adapter = adapters
         .get_mut(&session)
         .ok_or_else(|| "No debug adapter is running for this session.".to_string())?;
-    let payload = format!("Content-Length: {}\r\n\r\n{}", json.as_bytes().len(), json);
+    // `str::len()` is the UTF-8 byte count, which is what Content-Length is
+    // specified in. Under-reporting a non-ASCII payload desynchronises the
+    // adapter's frame parser.
+    let payload = format!("Content-Length: {}\r\n\r\n{}", json.len(), json);
     adapter
         .stdin
         .write_all(payload.as_bytes())

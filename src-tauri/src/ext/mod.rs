@@ -235,7 +235,9 @@ impl Registry {
 // Workspace snapshot — editor state pushed in from the frontend
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord,
+)]
 pub struct TextPosition {
     /// Zero-based, matching the LSP/editor convention the frontend uses.
     pub line: u32,
@@ -248,15 +250,6 @@ pub struct TextPosition {
 pub struct TextRange {
     pub start: TextPosition,
     pub end: TextPosition,
-}
-
-impl Default for TextPosition {
-    fn default() -> Self {
-        TextPosition {
-            line: 0,
-            character: 0,
-        }
-    }
 }
 
 /// The current editor/workspace state, mirrored from the webview.

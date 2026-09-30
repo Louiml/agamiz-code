@@ -198,18 +198,26 @@ fn parse_register_args<'lua>(
 }
 
 /// `my.extension.doThing` → `Do Thing`, for a readable default palette label.
+///
+/// The previous character is carried in `prev` rather than re-sliced out of
+/// `tail`. The original used `tail[..i]` with `i` from `chars().enumerate()`,
+/// which is a *character* offset used as a *byte* index: an extension id with a
+/// non-ASCII character anywhere before the tail's end (`my.ext.déjàVu`) indexed
+/// into the middle of a UTF-8 sequence and panicked inside the extension host.
 fn humanize_command_id(id: &str) -> String {
     let tail = id.rsplit('.').next().unwrap_or(id);
     let mut out = String::new();
-    for (i, ch) in tail.chars().enumerate() {
-        if i == 0 {
-            out.extend(ch.to_uppercase());
-        } else if ch.is_uppercase() && !tail[..i].ends_with(|p: char| p.is_uppercase()) {
-            out.push(' ');
-            out.push(ch);
-        } else {
-            out.push(ch);
+    let mut prev: Option<char> = None;
+    for ch in tail.chars() {
+        match prev {
+            None => out.extend(ch.to_uppercase()),
+            Some(p) if ch.is_uppercase() && !p.is_uppercase() => {
+                out.push(' ');
+                out.push(ch);
+            }
+            _ => out.push(ch),
         }
+        prev = Some(ch);
     }
     out
 }
@@ -1054,6 +1062,11 @@ fn finish_http(lua: &Lua, result: Result<ureq::http::Response<ureq::Body>, ureq:
 
 /// `mlua`'s `AnyUserData` has no useful `Display`; this matches Lua's own
 /// `tostring` conventions closely enough for log output.
+// The `lua` handle is threaded through for the recursive descent into tables
+// (and is the obvious place to thread a `lua.create_table` allocation budget
+// later). `only_used_in_recursion` is suppressed rather than obeyed: renaming it
+// to `_lua` would not compile, because the recursive calls pass it on.
+#[allow(clippy::only_used_in_recursion)]
 pub fn lua_to_string(lua: &Lua, value: Value) -> String {
     match value {
         Value::Nil => "nil".to_string(),
@@ -1077,17 +1090,15 @@ pub fn lua_to_string(lua: &Lua, value: Value) -> String {
                 }
             }
             if parts.is_empty() {
-                for pair in t.pairs::<Value, Value>() {
-                    if let Ok((k, v)) = pair {
-                        parts.push(format!(
-                            "[{}]={}",
-                            lua_to_string(lua, k),
-                            lua_to_string(lua, v)
-                        ));
-                        if parts.len() >= 8 {
-                            parts.push("...".to_string());
-                            break;
-                        }
+                for (k, v) in t.pairs::<Value, Value>().flatten() {
+                    parts.push(format!(
+                        "[{}]={}",
+                        lua_to_string(lua, k),
+                        lua_to_string(lua, v)
+                    ));
+                    if parts.len() >= 8 {
+                        parts.push("...".to_string());
+                        break;
                     }
                 }
             }
@@ -1268,5 +1279,36 @@ impl ExtCtx {
             ));
         }
         Ok(candidate.to_path_buf())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::humanize_command_id;
+
+    /// `humanize_command_id` used to slice `tail[..i]` with a *character*
+    /// offset from `chars().enumerate()`. Any non-ASCII character before the
+    /// tail's end put that slice inside a UTF-8 sequence, and the panic escaped
+    /// through the extension host's `catch_unwind` as a failed activation.
+    #[test]
+    fn command_ids_with_non_ascii_do_not_panic() {
+        // Accented: the character is 2 bytes, so a byte slice at the char index
+        // would land mid-sequence. The camelCase word split still happens, which
+        // is why `déjàVu` becomes "Déjà Vu" and not "DéjàVu".
+        assert_eq!(humanize_command_id("my.ext.d\u{e9}j\u{e0}Vu"), "D\u{e9}j\u{e0} Vu");
+        // Astral plane: a 4-byte character that is not a char boundary.
+        assert_eq!(humanize_command_id("my.ext.\u{1F600}wave"), "\u{1F600}wave");
+    }
+
+    #[test]
+    fn camel_case_becomes_title_case() {
+        assert_eq!(humanize_command_id("my.extension.doThing"), "Do Thing");
+        assert_eq!(humanize_command_id("solo"), "Solo");
+        assert_eq!(humanize_command_id("a.b.HTTPRequest"), "HTTPRequest");
+    }
+
+    #[test]
+    fn only_the_last_segment_is_used() {
+        assert_eq!(humanize_command_id("ext.build.compileAll"), "Compile All");
     }
 }

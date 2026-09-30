@@ -636,7 +636,9 @@ fn a_syntax_error_is_reported_with_the_chunk_name() {
 #[test]
 fn one_broken_extension_does_not_block_the_others() {
     let temp = TempDir::new("sweep");
-    let good = write_extension(
+    // The returned handles are unused: the assertions below check activation by
+    // id, which is the behaviour under test. Matches the `_bad` binding.
+    let _good = write_extension(
         temp.path(),
         "good",
         &manifest_json("good", "extension.lua"),

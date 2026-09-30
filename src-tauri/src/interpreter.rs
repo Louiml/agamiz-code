@@ -1,15 +1,15 @@
 //! Interpreter Resolver — discovers every toolchain the polyglot run/debug
 //! engine can drive, and validates user-supplied custom paths.
 //!
-//! Three discovery sources, in the priority order the UI presents them:
+//! Four discovery sources, in the priority order the UI presents them:
 //!
-//! 1. `venv`    — `.venv` / `venv` / `env` directories found by walking up
-//!                from the workspace root, so a project venv always beats the
-//!                system Python on PATH (the VS Code behaviour).
-//! 2. `conda`   — named environments under `~/anaconda3/envs` and friends,
-//!                plus anything `conda info --envs` reports.
-//! 3. `path`    — plain `PATH` scan over the [`SPECS`] table.
-//! 4. `wsl`     — interpreters inside the default WSL distribution.
+//! 1. `venv`  — `.venv` / `venv` / `env` directories found by walking up
+//!    from the workspace root, so a project venv always beats the
+//!    system Python on PATH (the VS Code behaviour).
+//! 2. `conda` — named environments under `~/anaconda3/envs` and friends,
+//!    plus anything `conda info --envs` reports.
+//! 3. `path`  — plain `PATH` scan over the [`SPECS`] table.
+//! 4. `wsl`   — interpreters inside the default WSL distribution.
 //!
 //! Every entry carries a *resolved* executable path so the executor never has
 //! to guess, plus a `version` string scraped from `--version` output. Probing

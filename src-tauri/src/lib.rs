@@ -119,18 +119,14 @@ fn rakc_binary() -> Option<String> {
     candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join(format!("../../target/debug/rakc{}", ext))
         .to_string_lossy().to_string());
-    for c in candidates {
-        if Command::new(&c)
+    candidates.into_iter().find(|c| {
+        Command::new(c)
             .arg("--version")
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
             .is_ok()
-        {
-            return Some(c);
-        }
-    }
-    None
+    })
 }
 
 #[tauri::command]
@@ -179,7 +175,11 @@ fn run_rak(app: AppHandle, mode: String, source: String) -> Result<(), String> {
     if let Some(out) = stdout {
         let app2 = app.clone();
         std::thread::spawn(move || {
-            for line in BufReader::new(out).lines().flatten() {
+            // `map_while(Result::ok)`, not `flatten()`: `Lines` is an infinite
+            // iterator, so a reader that keeps returning `Err` (a detached pipe,
+            // a full disk) would make `flatten()` spin forever on the same error
+            // instead of ending the stream.
+            for line in BufReader::new(out).lines().map_while(Result::ok) {
                 let _ = app2.emit("rak-output", RakLine { stream: "stdout".into(), text: line });
             }
         });
@@ -187,7 +187,7 @@ fn run_rak(app: AppHandle, mode: String, source: String) -> Result<(), String> {
     if let Some(err) = stderr {
         let app2 = app.clone();
         std::thread::spawn(move || {
-            for line in BufReader::new(err).lines().flatten() {
+            for line in BufReader::new(err).lines().map_while(Result::ok) {
                 let _ = app2.emit("rak-output", RakLine { stream: "stderr".into(), text: line });
             }
         });
@@ -491,7 +491,7 @@ fn list_files_recursive(path: String, ext: String) -> Result<Vec<FileEntry>, Str
     }
     let root = confine(&path)?;
     walk(&root, &ext, &mut results);
-    results.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    results.sort_by_key(|f| f.name.to_lowercase());
     Ok(results)
 }
 
@@ -742,7 +742,7 @@ fn workspace_root_lock() -> std::sync::MutexGuard<'static, Option<PathBuf>> {
 
 fn add_allowed_root(canonical: PathBuf) {
     let mut roots = roots_lock();
-    if !roots.iter().any(|r| *r == canonical) {
+    if !roots.contains(&canonical) {
         roots.push(canonical);
     }
 }
@@ -962,7 +962,8 @@ fn forward_proc_output(
     reader: std::process::ChildStdout,
 ) {
     std::thread::spawn(move || {
-        for line in BufReader::new(reader).lines().flatten() {
+        // `map_while(Result::ok)`, not `flatten()`: see `run_rak` above.
+        for line in BufReader::new(reader).lines().map_while(Result::ok) {
             let _ = app.emit("proc-output", ProcLine { id, stream: "stdout".into(), text: line });
         }
     });
@@ -974,7 +975,7 @@ fn forward_proc_error(
     reader: std::process::ChildStderr,
 ) {
     std::thread::spawn(move || {
-        for line in BufReader::new(reader).lines().flatten() {
+        for line in BufReader::new(reader).lines().map_while(Result::ok) {
             let _ = app.emit("proc-output", ProcLine { id, stream: "stderr".into(), text: line });
         }
     });
@@ -1233,7 +1234,11 @@ fn lsp_send(json: String) -> Result<(), String> {
     let mut g = LSP_STDIN.lock().unwrap();
     match g.as_mut() {
         Some(stdin) => {
-            let header = format!("Content-Length: {}\r\n\r\n", json.as_bytes().len());
+            // `str::len()` is already the UTF-8 byte count, which is what
+            // Content-Length is specified in — not a character count. A
+            // non-ASCII message body must not be under-reported here or the
+            // server will desynchronise on the next frame.
+            let header = format!("Content-Length: {}\r\n\r\n", json.len());
             stdin
                 .write_all(header.as_bytes())
                 .map_err(|e| e.to_string())?;

@@ -173,8 +173,10 @@ unsafe fn new_window_icon() -> Option<HICON> {
 /// Icon for the "Open Folder" button: the shell's standard "open folder"
 /// stock icon. Freshly created; leaked on purpose (process lifetime).
 unsafe fn folder_icon() -> Option<HICON> {
-    let mut sii = SHSTOCKICONINFO::default();
-    sii.cbSize = std::mem::size_of::<SHSTOCKICONINFO>() as u32;
+    let mut sii = SHSTOCKICONINFO {
+        cbSize: std::mem::size_of::<SHSTOCKICONINFO>() as u32,
+        ..Default::default()
+    };
     SHGetStockIconInfo(SIID_FOLDEROPEN, SHGSI_ICON | SHGSI_SMALLICON, &mut sii).ok()?;
     Some(sii.hIcon)
 }

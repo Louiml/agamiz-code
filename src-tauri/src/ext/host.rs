@@ -109,9 +109,11 @@ fn scan_dirs(root: &Path) -> Vec<(PathBuf, &'static str)> {
 /// Stand-in manifest so a broken `extension.json` still renders a row.
 fn fallback_manifest(dir_name: &str) -> ExtensionManifest {
     ExtensionManifest {
-        name: crate::ext::manifest::is_valid_extension_id(dir_name)
-            .then(|| dir_name.to_string())
-            .unwrap_or_else(|| "unknown".to_string()),
+        name: if crate::ext::manifest::is_valid_extension_id(dir_name) {
+            dir_name.to_string()
+        } else {
+            "unknown".to_string()
+        },
         display_name: Some(dir_name.to_string()),
         version: "0.0.0".to_string(),
         description: None,
@@ -349,14 +351,12 @@ pub fn deactivate(host: &ExtensionHost, id: &str) -> Result<(), String> {
 
     let lua = vm.lock().map_err(|_| "VM lock poisoned".to_string())?;
     if let Ok(handlers) = sandbox::handlers(&lua) {
-        if let Ok(env) = handlers.get::<_, Option<Table>>("env") {
-            if let Some(env) = env {
-                if let Ok(Value::Function(deactivate_fn)) = env.get::<_, Value>("deactivate") {
-                    if let Err(e) = guard("running deactivate()", || {
-                        deactivate_fn.call::<_, MultiValue>(())
-                    }) {
-                        log::warn!("[ext] {id} deactivate() failed: {e}");
-                    }
+        if let Ok(Some(env)) = handlers.get::<_, Option<Table>>("env") {
+            if let Ok(Value::Function(deactivate_fn)) = env.get::<_, Value>("deactivate") {
+                if let Err(e) = guard("running deactivate()", || {
+                    deactivate_fn.call::<_, MultiValue>(())
+                }) {
+                    log::warn!("[ext] {id} deactivate() failed: {e}");
                 }
             }
         }
