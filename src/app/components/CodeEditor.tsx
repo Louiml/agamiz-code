@@ -266,6 +266,20 @@ export default function CodeEditor({
   });
 
   /**
+   * Whether each history button should be enabled.
+   *
+   * `EditorHistory` is a plain mutable class, so a change to it does not
+   * schedule a render and a button bound straight to `history.canUndo` would
+   * keep whatever it read on first paint. Mirroring the two flags into state
+   * gives the toolbar something to re-render on, and keeps the affordance
+   * honest about there being nothing left to undo.
+   */
+  const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
+  const syncHistory = useCallback(() => {
+    setHistoryState({ canUndo: history.canUndo, canRedo: history.canRedo });
+  }, [history]);
+
+  /**
    * The last value the editor itself emitted.
    *
    * A `value` prop that differs from this did not come from typing: it is a
@@ -279,12 +293,23 @@ export default function CodeEditor({
   useEffect(() => {
     if (historyValueRef.current === value) return;
     historyValueRef.current = value;
+    // This is our own edit arriving back through the controlled `value` prop.
+    //
+    // `commit` sets `lastEmittedRef` before calling `onChange`, so comparing
+    // against it is what separates the two cases. Without this check the effect
+    // reset the history after *every* edit, including the editor's own, and
+    // since the host rerenders synchronously on each keystroke the stack never
+    // held more than one entry: undo and redo were both permanently dead in the
+    // real app, while passing against a test whose `onChange` spy never
+    // rerenders the parent.
+    if (lastEmittedRef.current === value) return;
     const ta = textareaRef.current;
     history.reset(value, ta?.selectionStart ?? 0, ta?.selectionEnd ?? ta?.selectionStart ?? 0);
+    syncHistory();
     lastEmittedRef.current = value;
     // `history` is stable for the component's lifetime, so listing it costs
     // nothing and keeps the effect honest.
-  }, [value, history]);
+  }, [value, history, syncHistory]);
 
   /**
    * Apply an edit: publish it, record it, and remember it as ours.
@@ -295,8 +320,10 @@ export default function CodeEditor({
   const commit = useCallback((next: string, anchor: number, caret = next.length) => {
     lastEmittedRef.current = next;
     history.push({ content: next, selectionStart: caret, selectionEnd: caret }, anchor, Date.now());
+    // After the push: the flags describe the stack as it is now, not as it was.
+    syncHistory();
     onChange(next);
-  }, [history, onChange]);
+  }, [history, onChange, syncHistory]);
 
   const undo = useCallback(() => {
     const ta = textareaRef.current;
@@ -307,6 +334,7 @@ export default function CodeEditor({
       selectionEnd: ta.selectionEnd,
     };
     const target = history.undo(current);
+    syncHistory();
     if (!target) return;
     lastEmittedRef.current = target.content;
     onChange(target.content);
@@ -317,7 +345,7 @@ export default function CodeEditor({
       const at = Math.min(target.selectionStart, target.content.length);
       textareaRef.current.selectionStart = textareaRef.current.selectionEnd = at;
     }, 0);
-  }, [history, onChange]);
+  }, [history, onChange, syncHistory]);
 
   const redo = useCallback(() => {
     const ta = textareaRef.current;
@@ -328,6 +356,7 @@ export default function CodeEditor({
       selectionEnd: ta.selectionEnd,
     };
     const target = history.redo(current);
+    syncHistory();
     if (!target) return;
     lastEmittedRef.current = target.content;
     onChange(target.content);
@@ -336,7 +365,7 @@ export default function CodeEditor({
       const at = Math.min(target.selectionStart, target.content.length);
       textareaRef.current.selectionStart = textareaRef.current.selectionEnd = at;
     }, 0);
-  }, [history, onChange]);
+  }, [history, onChange, syncHistory]);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -958,6 +987,33 @@ export default function CodeEditor({
 
       {/* Editor area */}
       <div className="relative flex-1 overflow-hidden">
+        {/* Undo / redo.
+            The keyboard chords are the primary route and are handled in
+            handleKeyDown; these are the discoverable equivalent, and the
+            disabled state is driven from the history rather than hardcoded,
+            so it cannot claim there is something to undo when there is not. */}
+        <div className="absolute top-2 left-2 z-10 flex items-center gap-0.5">
+          <button
+            type="button"
+            aria-label="Undo"
+            title="Undo (Ctrl+Z)"
+            disabled={!historyState.canUndo}
+            onClick={undo}
+            className="rounded p-1 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/60 disabled:opacity-30 disabled:pointer-events-none"
+          >
+            <Icon name="undo" size={13} />
+          </button>
+          <button
+            type="button"
+            aria-label="Redo"
+            title="Redo (Ctrl+Shift+Z or Ctrl+Y)"
+            disabled={!historyState.canRedo}
+            onClick={redo}
+            className="rounded p-1 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/60 disabled:opacity-30 disabled:pointer-events-none"
+          >
+            <Icon name="redo" size={13} />
+          </button>
+        </div>
         {/* Find/Replace bar */}
         {findOpen && (
           <div className="absolute top-0 right-0 z-20 bg-zinc-800 border-b border-l border-zinc-700 rounded-bl-lg p-2 flex flex-col gap-2 w-80 shadow-xl">
@@ -1059,13 +1115,20 @@ export default function CodeEditor({
             const before = lastEmittedRef.current;
             const next = e.target.value;
             if (next === before) return;
-            // The change started where the old selection began. For a plain
-            // insertion that is the old caret; for a replacement it is the start
-            // of the replaced range. Deriving it from the length delta keeps
-            // both cases contiguous.
+            // The change started where the old selection began, and the length
+            // delta recovers that position exactly in both directions: an
+            // insertion of N moves the caret forward N, so the old caret was
+            // `caret - N`; a deletion of N leaves the caret behind the removed
+            // run, so the old caret was `caret + N`. Both are `caret - delta`.
+            //
+            // Clamping the delta to `>= 0`, as this used to, only ever got
+            // insertion right. On a backspace it handed the history the
+            // *post*-delete caret as the anchor, which never matched the
+            // previous caret, so every backspace in a burst looked
+            // non-contiguous and each keystroke became its own undo step.
             const delta = next.length - before.length;
             const caret = e.target.selectionStart ?? next.length;
-            const anchor = Math.max(0, caret - Math.max(delta, 0));
+            const anchor = Math.max(0, caret - delta);
             commit(next, anchor, caret);
           }}
           onKeyDown={handleKeyDown}

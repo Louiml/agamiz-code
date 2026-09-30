@@ -6,7 +6,7 @@ export type IconName =
   | 'save' | 'play' | 'file-plus' | 'file-text' | 'folder' | 'folder-open' | 'folder-plus'
   | 'folder-search' | 'terminal' | 'panel-left' | 'monitor' | 'search' | 'zap' | 'bar-chart'
   | 'eraser' | 'trash' | 'x' | 'chevron-down' | 'chevron-up' | 'chevron-right' | 'scissors'
-  | 'clipboard' | 'copy' | 'pencil' | 'rotate-cw' | 'replace' | 'arrow-up' | 'arrow-down'
+  | 'clipboard' | 'copy' | 'pencil' | 'rotate-cw' | 'replace' | 'arrow-up' | 'arrow-down' | 'undo' | 'redo'
   | 'key' | 'box' | 'file-code' | 'tab' | 'ruler' | 'message-square' | 'gear' | 'dot'
   | 'list' | 'check' | 'book' | 'bug' | 'sparkles' | 'warning' | 'git-branch' | 'rocket'
   | 'split' | 'plus' | 'maximize' | 'minimize' | 'panel-bottom' | 'sidebar' | 'square'
@@ -49,6 +49,8 @@ const PATHS: Record<IconName, React.ReactNode> = {
   replace: <><path d="M17 2.1 21 6l-4 3.9" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="M7 21.9 3 18l4-3.9" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></>,
   'arrow-up': <><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></>,
   'arrow-down': <><path d="M12 5v14" /><path d="m19 12-7 7-7-7" /></>,
+  'undo': <><polyline points="9 14 4 9 9 4" /><path d="M20 20v-7a4 4 0 0 0-4-4H4" /></>,
+  'redo': <><polyline points="15 14 20 9 15 4" /><path d="M4 20v-7a4 4 0 0 1 4-4h12" /></>,
   key: <><circle cx="7.5" cy="15.5" r="4.5" /><path d="m10.5 12.5 8-8" /><path d="m16 6 3 3" /><path d="m13 9 2 2" /></>,
   box: <><path d="M21 8 12 3 3 8v8l9 5 9-5z" /><path d="M3 8l9 5 9-5" /><path d="M12 13v8" /></>,
   'file-code': <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="m9 13-2 2 2 2" /><path d="m13 13 2 2-2 2" /></>,

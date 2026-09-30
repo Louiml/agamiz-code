@@ -12,6 +12,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import CodeEditor from './CodeEditor';
 
 type EditorProps = React.ComponentProps<typeof CodeEditor>;
@@ -40,6 +41,48 @@ function placeCaret(ta: HTMLTextAreaElement, start: number, end = start) {
   ta.setSelectionRange(start, end);
   fireEvent.select(ta);
   fireEvent.keyUp(ta, { key: 'ArrowRight' });
+}
+
+/** The text a host swap writes in, distinguishable from anything the editor could produce. */
+const EXTERNAL = 'replaced from outside';
+
+/**
+ * Render the editor inside a real stateful parent.
+ *
+ * `setup` hands `onChange` to a spy and never rerenders, which leaves the
+ * `value` prop frozen at the initial text for the life of the test. That hides
+ * a whole class of bug in a *controlled* component: every branch that reacts
+ * to `value` changing never runs, so a history reset triggered by the editor's
+ * own edit cannot be observed at all. This helper wires a genuine `useState`,
+ * so the editor's edits come back through the prop exactly as they do in the
+ * app, and the `external` button stands in for a file switch or agent write.
+ */
+function setupControlled(initial: string, overrides: Overrides = {}) {
+  const seen: string[] = [];
+  function Host() {
+    const [value, setValue] = useState(initial);
+    return (
+      <>
+        <CodeEditor
+          {...({
+            value,
+            onChange: (next: string) => {
+              seen.push(next);
+              setValue(next);
+            },
+            ...overrides,
+          } as EditorProps)}
+        />
+        <button type="button" data-testid="external" onClick={() => setValue(EXTERNAL)}>
+          external
+        </button>
+      </>
+    );
+  }
+  const utils = render(<Host />);
+  const ta = utils.container.querySelector('textarea');
+  if (!ta) throw new Error('no textarea rendered');
+  return { ...utils, ta, seen };
 }
 
 describe('rendering', () => {
@@ -343,6 +386,154 @@ describe('undo', () => {
     onChange.mockClear();
     fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
     expect(onChange).toHaveBeenCalledWith('x');
+  });
+});
+
+describe('undo with a real parent', () => {
+  // Everything in the block above runs against a frozen alue prop, so none
+  // of it can see a history reset triggered by the editor's own edit. These
+  // rerender for real.
+
+  it('undoes its own edit when the parent rerenders with it', () => {
+    const { ta } = setupControlled('one');
+    placeCaret(ta, 3);
+    fireEvent.change(ta, { target: { value: 'one two' } });
+    expect(ta.value).toBe('one two');
+
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(ta.value).toBe('one');
+  });
+
+  it('undoes more than one step when the parent rerenders with each edit', () => {
+    const { ta } = setupControlled('');
+    // Three genuinely separate steps, not one typing burst: a newline and a
+    // paste each force their own entry, where consecutive single characters
+    // would (correctly) coalesce into one.
+    fireEvent.change(ta, { target: { value: 'a' } });
+    fireEvent.change(ta, { target: { value: 'a\n' } });
+    fireEvent.change(ta, { target: { value: 'a\nbLOTS OF TEXT' } });
+    expect(ta.value).toBe('a\nbLOTS OF TEXT');
+
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(ta.value).toBe('a\n');
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(ta.value).toBe('a');
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(ta.value).toBe('');
+  });
+
+  it('undoes a run of backspaces as one step', () => {
+    const { ta } = setupControlled('abcd');
+    // A real backspace shrinks the value by one *and* moves the caret back, so
+    // the position the history needs is the old caret, not the new one. Getting
+    // that backwards made every backspace in a burst look non-contiguous.
+    const backspace = (from: string, at: number) => {
+      const next = from.slice(0, at - 1) + from.slice(at);
+      fireEvent.change(ta, { target: { value: next, selectionStart: at - 1 } });
+    };
+    backspace('abcd', 4);
+    backspace('abc', 3);
+    backspace('ab', 2);
+    expect(ta.value).toBe('a');
+
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(ta.value).toBe('abcd');
+  });
+
+  it('redoes after undo when the parent rerenders', () => {
+    const { ta } = setupControlled('one');
+    placeCaret(ta, 3);
+    fireEvent.change(ta, { target: { value: 'one two' } });
+
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(ta.value).toBe('one');
+
+    // The point of the test: alue changed twice already, and the redo
+    // branch has to have survived both round trips.
+    fireEvent.keyDown(ta, { key: 'y', ctrlKey: true });
+    expect(ta.value).toBe('one two');
+  });
+
+  it('still refuses to undo across a genuine external replacement', () => {
+    const { ta } = setupControlled('original');
+    placeCaret(ta, 8);
+    fireEvent.change(ta, { target: { value: 'original!' } });
+
+    fireEvent.click(screen.getByTestId('external'));
+    expect(ta.value).toBe(EXTERNAL);
+
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(ta.value).toBe(EXTERNAL);
+  });
+
+  it('redoes a programmatic edit when the parent rerenders', () => {
+    const { ta } = setupControlled('one\ntwo');
+    placeCaret(ta, 0);
+    fireEvent.keyDown(ta, { key: 'd', ctrlKey: true });
+    expect(ta.value).toBe('one\none\ntwo');
+
+    fireEvent.keyDown(ta, { key: 'z', ctrlKey: true });
+    expect(ta.value).toBe('one\ntwo');
+    fireEvent.keyDown(ta, { key: 'Z', ctrlKey: true, shiftKey: true });
+    expect(ta.value).toBe('one\none\ntwo');
+  });
+});
+
+describe('undo/redo buttons', () => {
+  const btn = (name: string) =>
+    screen.getByRole('button', { name }) as HTMLButtonElement;
+
+  it('starts with both disabled on a freshly opened file', () => {
+    setupControlled('hello');
+    expect(btn('Undo').disabled).toBe(true);
+    expect(btn('Redo').disabled).toBe(true);
+  });
+
+  it('enables undo after an edit and redo only after an undo', () => {
+    const { ta } = setupControlled('hello');
+    placeCaret(ta, 5);
+    fireEvent.change(ta, { target: { value: 'hello!' } });
+    expect(btn('Undo').disabled).toBe(false);
+    expect(btn('Redo').disabled).toBe(true);
+
+    fireEvent.click(btn('Undo'));
+    expect(ta.value).toBe('hello');
+    expect(btn('Redo').disabled).toBe(false);
+  });
+
+  it('redoes when the redo button is clicked', () => {
+    const { ta } = setupControlled('hello');
+    placeCaret(ta, 5);
+    fireEvent.change(ta, { target: { value: 'hello!' } });
+
+    fireEvent.click(btn('Undo'));
+    expect(ta.value).toBe('hello');
+    fireEvent.click(btn('Redo'));
+    expect(ta.value).toBe('hello!');
+  });
+
+  it('disables redo again once a new edit invalidates the branch', () => {
+    const { ta } = setupControlled('hello');
+    placeCaret(ta, 5);
+    fireEvent.change(ta, { target: { value: 'hello!' } });
+    fireEvent.click(btn('Undo'));
+    expect(btn('Redo').disabled).toBe(false);
+
+    placeCaret(ta, 5);
+    fireEvent.change(ta, { target: { value: 'hello?' } });
+    expect(btn('Redo').disabled).toBe(true);
+  });
+
+  it('disables undo across a genuine external replacement', () => {
+    const { ta } = setupControlled('hello');
+    placeCaret(ta, 5);
+    fireEvent.change(ta, { target: { value: 'hello!' } });
+    expect(btn('Undo').disabled).toBe(false);
+
+    fireEvent.click(screen.getByTestId('external'));
+    expect(ta.value).toBe(EXTERNAL);
+    expect(btn('Undo').disabled).toBe(true);
+    expect(btn('Redo').disabled).toBe(true);
   });
 });
 
