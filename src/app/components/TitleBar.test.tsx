@@ -26,6 +26,14 @@ describe('TitleBar', () => {
     expect(screen.getByText('my-app')).toBeTruthy();
   });
 
+  it('shows the bare folder name, not the path, for D:\\agamiztest', () => {
+    // The exact case reported as broken: the bar must read `agamiztest`, never
+    // the drive and path, because the path is already on hover.
+    const { container } = render(<TitleBar workspacePath="D:\\agamiztest" />);
+    expect(screen.getByText('agamiztest')).toBeTruthy();
+    expect(container.textContent).not.toContain('D:\\');
+  });
+
   it('shows no name when no workspace is open', () => {
     // The welcome screen renders the bar with no prop, and there is nothing to
     // name. A stray separator or an empty label would look like a bug.
